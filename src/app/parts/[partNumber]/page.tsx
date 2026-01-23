@@ -10,6 +10,7 @@ import { realInventory, suppliers } from "@/lib/inventory";
 import { demoCustomer, calculateEntitlementPrice } from "@/lib/vehicles";
 import { DemoMode, DEMO_CONFIGS } from "@/lib/demoMode";
 import { initWearWASM, isWearWASMAvailable } from "@/lib/wasm/wearEngine";
+import { normalizeZip } from "@/lib/zip";
 
 function PartDetailContent() {
   const params = useParams();
@@ -19,6 +20,7 @@ function PartDetailContent() {
   const modeParam = searchParams.get("mode");
   const mode: DemoMode = modeParam === "search" ? "search" : "commerce";
   const config = DEMO_CONFIGS[mode];
+  const zipCode = normalizeZip(searchParams.get("zip") || searchParams.get("zipCode"));
 
   const [part, setPart] = useState<Part | null>(null);
   const [localPart, setLocalPart] = useState<typeof realInventory[0] | null>(null);
@@ -81,7 +83,7 @@ function PartDetailContent() {
 
       // Otherwise try API
       try {
-        const response = await searchParts(partNumber, "92101", 1, 20);
+        const response = await searchParts(partNumber, zipCode, 1, 20);
         const found = response.parts.find((p) => p.partNumber === partNumber);
         
         setPart(found || null);
@@ -97,7 +99,7 @@ function PartDetailContent() {
     };
 
     fetchPart();
-  }, [partNumber]);
+  }, [partNumber, zipCode]);
 
   // WASM Fluid Visualization
   useEffect(() => {
