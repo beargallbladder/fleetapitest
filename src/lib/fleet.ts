@@ -1,5 +1,6 @@
 // Fleet Management - Vehicles, Weather, Service Priority
 // Expanded fleet with diverse Ford models
+import { dedupeStrings } from "./dedupe";
 
 export interface FleetVehicle {
   vin: string;
@@ -85,7 +86,7 @@ export function getFleetByModel(model: string): FleetVehicle[] {
 
 // Get fleet statistics
 export function getFleetStats() {
-  const models = [...new Set(fleetVehicles.map(v => v.model))];
+  const models = dedupeStrings(fleetVehicles.map(v => v.model));
   const totalMiles = fleetVehicles.reduce((sum, v) => sum + v.odometer, 0);
   const avgHealth = fleetVehicles.reduce((sum, v) => sum + v.fordHealthScore, 0) / fleetVehicles.length;
   const alertCount = fleetVehicles.reduce((sum, v) => sum + v.fordAlerts.length, 0);

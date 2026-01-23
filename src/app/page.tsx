@@ -1012,7 +1012,15 @@ function PartsInterface({ mode, config }: { mode: DemoMode; config: DemoConfig }
     
     async function loadRecalls() {
       const recallCounts = new Map<string, number>();
-      const uniqueVehicles = [...new Set(fleetVehicles.map(v => `${v.year}-${v.model}`))];
+      const uniqueVehicles: string[] = [];
+      const seen: Record<string, true> = {};
+      for (const v of fleetVehicles) {
+        const key = `${v.year}-${v.model}`;
+        if (!seen[key]) {
+          seen[key] = true;
+          uniqueVehicles.push(key);
+        }
+      }
       
       for (const key of uniqueVehicles) {
         const [year, model] = key.split("-");

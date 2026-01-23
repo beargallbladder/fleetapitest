@@ -11,11 +11,12 @@ import {
   estimateFilterWear,
   FluidState,
   FilterState,
-  FluidType,
   FilterType,
   FLUID_PRESETS,
   FILTER_PRESETS,
 } from "@/lib/wasm/wearEngine";
+
+type ActiveFluidType = "oil" | "coolant" | "brake" | "transmission";
 
 // Mock vehicle data
 const DEMO_VEHICLE = {
@@ -37,7 +38,7 @@ export default function WearDashboardPage() {
   const [wasmReady, setWasmReady] = useState(false);
   const [engineRunning, setEngineRunning] = useState(false);
   const [mileage, setMileage] = useState(DEMO_VEHICLE.mileage);
-  const [selectedFluid, setSelectedFluid] = useState<FluidType | null>(null);
+  const [selectedFluid, setSelectedFluid] = useState<ActiveFluidType | null>(null);
   const [selectedFilter, setSelectedFilter] = useState<FilterType | null>(null);
 
   // Initialize WASM
@@ -227,7 +228,7 @@ export default function WearDashboardPage() {
             </div>
             
             <div className="grid grid-cols-4 gap-4">
-              {(Object.entries(fluidStates) as [FluidType, FluidState][]).map(([type, state]) => (
+              {(Object.entries(fluidStates) as [ActiveFluidType, FluidState][]).map(([type, state]) => (
                 <div 
                   key={type}
                   className={`cursor-pointer transition-all ${

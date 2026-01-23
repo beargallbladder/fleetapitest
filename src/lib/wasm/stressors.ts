@@ -12,6 +12,7 @@
  * - LR_i = Likelihood ratio for stressor i
  * - intensity_i = Scaled 0-1 impact value
  */
+import { dedupeStrings } from "../dedupe";
 
 // ============================================================================
 // BASE FAILURE RATE
@@ -434,7 +435,7 @@ export function calculateFailureProbability(input: StressorInput): FailureProbab
     combinedMultiplier,
     stressors,
     primaryRisk,
-    recommendedParts: [...new Set(recommendedParts)],
+    recommendedParts: dedupeStrings(recommendedParts),
   };
 }
 

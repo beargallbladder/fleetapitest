@@ -112,7 +112,11 @@ export function FilterMesh({
       const deltaTime = Math.min((timestamp - timeRef.current) / 1000, 0.05);
       timeRef.current = timestamp;
 
-      if (!gridRef.current) return;
+      const grid = gridRef.current;
+      if (!grid) {
+        animationRef.current = requestAnimationFrame(animate);
+        return;
+      }
 
       // Clear
       ctx.clearRect(0, 0, width, height);
@@ -127,7 +131,7 @@ export function FilterMesh({
       for (let y = 0; y < GRID_SIZE; y++) {
         for (let x = 0; x < GRID_SIZE; x++) {
           const idx = y * GRID_SIZE + x;
-          const clogging = gridRef.current[idx];
+          const clogging = grid[idx];
           
           // Interpolate color based on clogging
           const r = Math.round(cleanColor.r + (dirtyColor.r - cleanColor.r) * clogging);
@@ -197,14 +201,14 @@ export function FilterMesh({
           
           if (gridX >= 0 && gridX < GRID_SIZE && gridY >= 0 && gridY < GRID_SIZE) {
             const idx = gridY * GRID_SIZE + gridX;
-            const clogging = gridRef.current[idx];
+            const clogging = grid[idx];
             
             // Higher chance of getting trapped in clogged areas
             if (Math.random() < clogging * 0.05 * deltaTime * 60) {
               p.trapped = true;
               p.trappedAt = { x: p.x, y: p.y };
               // Increase clogging in this cell
-              gridRef.current[idx] = Math.min(1, clogging + 0.001);
+              grid[idx] = Math.min(1, clogging + 0.001);
             }
           }
 

@@ -1,6 +1,7 @@
 // Fleet Lead Scoring Engine
 // Calculates Maintenance Severity Score (0-100) for vehicle fleets
 // Based on environmental factors that cause vehicle wear
+import { dedupeStrings } from "./dedupe";
 
 // ============================================================================
 // TYPES
@@ -325,7 +326,7 @@ function getRecommendedUpsells(factors: RiskFactors): string[] {
   }
   
   // Dedupe
-  return [...new Set(upsells)].slice(0, 6);
+  return dedupeStrings(upsells).slice(0, 6);
 }
 
 function getPrimaryRisk(factors: RiskFactors): [string, string[]] {

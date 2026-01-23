@@ -86,7 +86,15 @@ export default function FleetIntelligencePage() {
   useEffect(() => {
     async function loadRecalls() {
       const recallMap = new Map<string, NHTSARecall[]>();
-      const uniqueVehicles = [...new Set(fleetVehicles.map(v => `${v.year}-${v.model}`))];
+      const uniqueVehicles: string[] = [];
+      const seen: Record<string, true> = {};
+      for (const v of fleetVehicles) {
+        const key = `${v.year}-${v.model}`;
+        if (!seen[key]) {
+          seen[key] = true;
+          uniqueVehicles.push(key);
+        }
+      }
       
       for (const key of uniqueVehicles) {
         const [year, model] = key.split("-");
@@ -445,13 +453,13 @@ export default function FleetIntelligencePage() {
                         {selectedRecalls.slice(0, 3).map((recall, idx) => (
                           <div key={idx} className="bg-white rounded-lg p-4">
                             <div className="font-medium text-red-900 text-sm mb-1">
-                              {recall.component}
+                              {recall.Component}
                             </div>
                             <p className="text-xs text-neutral-600 line-clamp-2">
-                              {recall.summary}
+                              {recall.Summary}
                             </p>
                             <div className="mt-2 text-xs text-neutral-400">
-                              Campaign: {recall.nhtsaCampaignNumber}
+                              Campaign: {recall.NHTSACampaignNumber}
                             </div>
                           </div>
                         ))}

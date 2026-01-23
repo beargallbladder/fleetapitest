@@ -110,8 +110,16 @@ function DashboardContent() {
     async function fetchData() {
       setLoading(true);
       try {
-        const fleetVehicleTypes = [...new Set(fleetVehicles.map(v => JSON.stringify({ year: v.year, model: v.model })))]
-          .map(s => JSON.parse(s));
+        // Avoid Set iteration (can break TS builds when targeting < ES2015)
+        const fleetVehicleTypes: { year: number; model: string }[] = [];
+        const seen: Record<string, true> = {};
+        for (const v of fleetVehicles) {
+          const key = `${v.year}:${v.model}`;
+          if (!seen[key]) {
+            seen[key] = true;
+            fleetVehicleTypes.push({ year: v.year, model: v.model });
+          }
+        }
         
         const [weatherData, recallData, investigationData] = await Promise.all([
           fetchWeatherWithNormals(),
@@ -183,7 +191,10 @@ function DashboardContent() {
   const getPartInfo = (sku: string) => realInventory.find(p => p.sku === sku);
 
   // Count total vehicles with recalls
-  const totalVehiclesWithRecalls = [...vehicleRecallMap.values()].filter(c => c > 0).length;
+  let totalVehiclesWithRecalls = 0;
+  vehicleRecallMap.forEach((c) => {
+    if (c > 0) totalVehiclesWithRecalls += 1;
+  });
 
   if (loading) {
     return (

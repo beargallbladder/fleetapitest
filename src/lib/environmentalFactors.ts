@@ -1,5 +1,6 @@
 // Environmental Stress Factors for Fleet Service Priority
 // Based on location, driving patterns, and conditions
+import { dedupeStrings } from "./dedupe";
 
 export interface EnvironmentalFactors {
   // Location-based
@@ -270,5 +271,5 @@ export function getEnvironmentalPartRecommendations(env: EnvironmentalFactors): 
     parts.push("BAGM-48H6-800", "BXT-96R-590");
   }
   
-  return [...new Set(parts)];
+  return dedupeStrings(parts);
 }

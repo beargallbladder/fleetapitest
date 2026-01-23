@@ -5,43 +5,25 @@ const INTERNAL_API_BASE = "";
 
 export interface Dealer {
   dealerId: string;
-  dealerName: string;
-  zipCode: string;
-  participationLevel: string;
-  salesModel: string;
-  distanceMiles: number;
-  inventoryId: string;
-  available: number;
+  name: string;
+  distance: number;
   webPrice: number;
-  msrp: number;
-  pickupAvailable: boolean;
-  leadTimeDays: number;
-  isPreferred: boolean;
-  actionType: string;
+  stock: number;
 }
 
 export interface Part {
   partNumber: string;
+  name: string;
+  brand: string;
   description: string;
-  longDescription: string;
-  categoryId: string;
-  subcategoryId: string;
-  unitOfMeasure: string;
+  category: string;
+  subcategory: string;
+  imageUrl: string;
   listPrice: number;
-  coreCharge: number;
-  isWearAndTear: boolean;
   dealers: Dealer[];
-  availability: {
-    preferredDealerHasStock: boolean;
-    dealersAvailable: number;
-    minWebPrice: number;
-    aggregatorActive: boolean;
-  };
 }
 
 export interface SearchResponse {
-  precisionLevel: string;
-  pricingTier: string;
   totalResults: number;
   page: number;
   pageSize: number;

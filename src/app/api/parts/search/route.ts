@@ -6,6 +6,58 @@ function jsonError(message: string, status = 500) {
   return NextResponse.json({ error: message }, { status });
 }
 
+type JerichoDealer = {
+  dealerId: string;
+  dealerName: string;
+  distanceMiles: number;
+  available: number;
+  webPrice: number;
+  // other fields exist but we don't need them in the UI right now
+};
+
+type JerichoPart = {
+  partNumber: string;
+  description: string;
+  longDescription?: string;
+  categoryId?: string;
+  subcategoryId?: string;
+  listPrice: number;
+  dealers: JerichoDealer[];
+};
+
+type JerichoSearchResponse = {
+  totalResults?: number;
+  page?: number;
+  pageSize?: number;
+  parts: JerichoPart[];
+};
+
+function toUiResponse(data: JerichoSearchResponse) {
+  return {
+    totalResults: typeof data.totalResults === "number" ? data.totalResults : data.parts.length,
+    page: typeof data.page === "number" ? data.page : 1,
+    pageSize: typeof data.pageSize === "number" ? data.pageSize : data.parts.length,
+    parts: (data.parts || []).map((p) => ({
+      partNumber: p.partNumber,
+      // Our UI expects "name" + "brand"; Jericho doesn't provide brand, so default to Ford/OEM.
+      name: p.description,
+      brand: "Ford",
+      description: p.longDescription || p.description,
+      category: p.categoryId || "",
+      subcategory: p.subcategoryId || "",
+      imageUrl: "",
+      listPrice: p.listPrice,
+      dealers: (p.dealers || []).map((d) => ({
+        dealerId: d.dealerId,
+        name: d.dealerName,
+        distance: d.distanceMiles,
+        webPrice: d.webPrice,
+        stock: d.available,
+      })),
+    })),
+  };
+}
+
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const keyword = (url.searchParams.get("keyword") || "").trim();
@@ -42,8 +94,8 @@ export async function GET(req: Request) {
       return jsonError(`Upstream parts API error (${res.status})${body ? `: ${body.slice(0, 200)}` : ""}`, 502);
     }
 
-    const data = await res.json();
-    return NextResponse.json(data, {
+    const data = (await res.json()) as JerichoSearchResponse;
+    return NextResponse.json(toUiResponse(data), {
       status: 200,
       headers: {
         // Prevent shared/proxy caching of potentially sensitive commercial data

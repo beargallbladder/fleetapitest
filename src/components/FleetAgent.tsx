@@ -210,7 +210,12 @@ export function FleetAgent() {
       stock: 10,
     }, 1);
 
-    setAddedSkus(prev => new Set([...prev, `${prediction.vehicleId}-${prediction.partSku}`]));
+    setAddedSkus((prev) => {
+      const next = new Set<string>();
+      prev.forEach((v) => next.add(v));
+      next.add(`${prediction.vehicleId}-${prediction.partSku}`);
+      return next;
+    });
     
     addMessage("action", `Added ${prediction.partName} for ${prediction.vehicleName} to cart`);
   };

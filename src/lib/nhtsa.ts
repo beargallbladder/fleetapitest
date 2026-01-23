@@ -1,5 +1,6 @@
 // NHTSA API - Real Data Only
 // Recalls, Complaints, Investigations
+import { dedupeStrings } from "./dedupe";
 
 export interface NHTSARecall {
   NHTSACampaignNumber: string;
@@ -86,14 +87,14 @@ export async function fetchInvestigations(): Promise<NHTSAInvestigation[]> {
   try {
     const res = await fetch("https://api.nhtsa.gov/investigations");
     const data = await res.json();
-    return (data.results || []).map((r: Record<string, unknown>) => ({
-      nhtsaId: r.nhtsaId || "",
-      investigationType: r.investigationType || "",
-      subject: r.subject || "",
-      description: (r.description || "").replace(/<[^>]*>/g, ""), // Strip HTML
-      status: r.status || "",
-      openDate: r.openDate || "",
-      latestActivityDate: r.latestActivityDate || "",
+    return (data.results || []).map((r: any) => ({
+      nhtsaId: String(r?.nhtsaId || ""),
+      investigationType: String(r?.investigationType || ""),
+      subject: String(r?.subject || ""),
+      description: String(r?.description || "").replace(/<[^>]*>/g, ""), // Strip HTML
+      status: String(r?.status || ""),
+      openDate: String(r?.openDate || ""),
+      latestActivityDate: String(r?.latestActivityDate || ""),
     }));
   } catch (error) {
     console.error("NHTSA Investigations API error:", error);
@@ -129,7 +130,7 @@ export async function fetchVehicleNHTSAData(year: number, model: string): Promis
   const recalls = await fetchRecalls(year, model);
   
   // Extract unique components
-  const components = [...new Set(recalls.map(r => r.Component))];
+  const components = dedupeStrings(recalls.map(r => r.Component));
   
   return {
     recalls,

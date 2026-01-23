@@ -4,6 +4,7 @@
 import { FleetVehicle } from "./fleet";
 import { WeatherData, calculateWeatherStressMultiplier } from "./weather";
 import { EnvironmentalFactors, sanDiegoEnvironment, calculateEnvironmentalStress } from "./environmentalFactors";
+import { dedupeStrings } from "./dedupe";
 
 export interface ServicePriority {
   vin: string;
@@ -217,7 +218,7 @@ export function calculateServicePriority(
     priorityScore,
     priorityLevel,
     factors,
-    recommendedParts: [...new Set(recommendedParts)], // Dedupe
+    recommendedParts: dedupeStrings(recommendedParts), // Dedupe
     estimatedServiceDate: recommendedDate.toISOString().split("T")[0],
     daysUntilRecommended: recommendedDays,
     hasActiveRecall,

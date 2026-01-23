@@ -4,11 +4,12 @@
 
 import { Part, realInventory } from "./inventory";
 import { FordModel, modelCategories } from "./fleet";
+import { dedupeStrings } from "./dedupe";
 
 // Model-specific part variations
 // Uses real SKUs as base, with model-specific variants
 
-interface ModelPart extends Omit<Part, "categoryId" | "subcategoryId"> {
+interface ModelPart extends Omit<Part, "categoryId" | "subcategoryId" | "supplier" | "isOEM"> {
   compatibleModels: FordModel[];
   modelSpecific: boolean;
 }
@@ -144,6 +145,8 @@ export function getPartsForModel(model: FordModel): Part[] {
     ...p,
     categoryId: getCategoryForPart(p),
     subcategoryId: getSubcategoryForPart(p),
+    supplier: "ford",
+    isOEM: p.brand === "Motorcraft" || p.brand === "Ford" || p.brand === "Ford Accessories",
   }));
   
   return [...specificParts, ...universalParts];
@@ -208,6 +211,6 @@ export function getModelInventoryStats(model: FordModel) {
       min: Math.min(...parts.map(p => p.price)),
       max: Math.max(...parts.map(p => p.price)),
     },
-    categories: [...new Set(parts.map(p => p.categoryId))],
+    categories: dedupeStrings(parts.map(p => p.categoryId)),
   };
 }

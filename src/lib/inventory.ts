@@ -1,6 +1,7 @@
 // Real Ford Parts & Motorcraft Inventory + Aftermarket Alternatives
 // Source: Ford Parts Screen Capture + Marketplace Data
 // Extraction Date: 2026-01-22
+import { dedupeStrings } from "./dedupe";
 
 export interface Part {
   sku: string;
@@ -217,6 +218,6 @@ export const inventoryStats = {
   totalParts: realInventory.length,
   oemParts: realInventory.filter(p => p.isOEM).length,
   aftermarketParts: realInventory.filter(p => !p.isOEM).length,
-  suppliers: [...new Set(realInventory.map(p => p.supplier))],
-  brands: [...new Set(realInventory.map(p => p.brand))],
+  suppliers: dedupeStrings(realInventory.map(p => p.supplier)),
+  brands: dedupeStrings(realInventory.map(p => p.brand)),
 };
