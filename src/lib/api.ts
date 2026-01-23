@@ -1,5 +1,7 @@
-const API_BASE = "https://jericho-api-48gl.onrender.com";
-const API_KEY = "pk_tzsEvAl49kqvkDvHGDhhAHEKeeG4wTtv";
+// NOTE: Do NOT call the upstream API directly from the browser (it would leak the API key).
+// All parts API traffic should go through our internal proxy route:
+// `GET /api/parts/search?keyword=...&zipCode=...`
+const INTERNAL_API_BASE = "";
 
 export interface Dealer {
   dealerId: string;
@@ -59,15 +61,17 @@ export async function searchParts(
     pageSize: String(pageSize),
   });
 
-  const res = await fetch(`${API_BASE}/v1/parts/search?${params}`, {
-    headers: {
-      "x-api-key": API_KEY,
-    },
-    cache: "no-store",
-  });
+  const res = await fetch(`${INTERNAL_API_BASE}/api/parts/search?${params}`, { cache: "no-store" });
 
   if (!res.ok) {
-    throw new Error("Failed to fetch parts");
+    let msg = "Failed to fetch parts";
+    try {
+      const data = await res.json();
+      if (data?.error) msg = String(data.error);
+    } catch {
+      // ignore
+    }
+    throw new Error(msg);
   }
 
   return res.json();
