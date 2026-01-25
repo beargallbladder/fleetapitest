@@ -11,10 +11,10 @@ import { fleetVehicles } from "@/lib/fleet";
 import { fetchRecalls } from "@/lib/nhtsa";
 import { DemoMode, DEMO_CONFIGS, DemoConfig } from "@/lib/demoMode";
 import { initWearWASM, isWearWASMAvailable } from "@/lib/wasm/wearEngine";
-import { FleetAgent } from "@/components/FleetAgent";
+import { normalizeZip } from "@/lib/zip";
 
 // ============================================================================
-// WASM CATEGORY HERO COMPONENTS
+// CATEGORY HERO COMPONENTS
 // ============================================================================
 
 function FluidsCategoryHero({ onClick }: { onClick: () => void }) {
@@ -125,7 +125,7 @@ function FluidsCategoryHero({ onClick }: { onClick: () => void }) {
           <div className="flex items-center gap-2 mb-2 md:mb-3">
             <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
             <span className="text-[10px] text-amber-400 uppercase tracking-wider font-medium">
-              WASM
+              LIVE
             </span>
           </div>
           <h3 className="text-xl md:text-2xl font-light text-white mb-1 md:mb-2">Fluids</h3>
@@ -342,7 +342,7 @@ function BrakesCategoryHero({ onClick }: { onClick: () => void }) {
           <div className="flex items-center gap-2 mb-2 md:mb-3">
             <div className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
             <span className="text-[10px] text-red-400 uppercase tracking-wider font-medium">
-              WASM
+              LIVE
             </span>
           </div>
           <h3 className="text-xl md:text-2xl font-light text-white mb-1 md:mb-2">Brakes</h3>
@@ -600,7 +600,7 @@ function ElectricalCategoryHero({ onClick }: { onClick: () => void }) {
           <div className="flex items-center gap-2 mb-2 md:mb-3">
             <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
             <span className="text-[10px] text-blue-400 uppercase tracking-wider font-medium">
-              WASM
+              LIVE
             </span>
           </div>
           <h3 className="text-xl md:text-2xl font-light text-white mb-1 md:mb-2">Electrical</h3>
@@ -806,7 +806,7 @@ function WipersCategoryHero({ onClick }: { onClick: () => void }) {
           <div className="flex items-center gap-2 mb-2 md:mb-3">
             <div className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
             <span className="text-[10px] text-sky-400 uppercase tracking-wider font-medium">
-              WASM
+              LIVE
             </span>
           </div>
           <h3 className="text-xl md:text-2xl font-light text-white mb-1 md:mb-2">Wipers</h3>
@@ -935,7 +935,7 @@ function FiltersCategoryHero({ onClick }: { onClick: () => void }) {
           <div className="flex items-center gap-2 mb-2 md:mb-3">
             <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
             <span className="text-[10px] text-cyan-400 uppercase tracking-wider font-medium">
-              WASM
+              LIVE
             </span>
           </div>
           <h3 className="text-xl md:text-2xl font-light text-white mb-1 md:mb-2">Filters</h3>
@@ -985,8 +985,23 @@ const ALL_CATEGORIES = [
 const WEAR_PARTS = ["FL-500S", "FA-1900", "FP-88", "BRF-1478", "SP-589", "BAGM-48H6-800", "WW-2201-PF", "VC-13DL-G"];
 
 // Main Parts Interface
-function PartsInterface({ mode, config }: { mode: DemoMode; config: DemoConfig }) {
+function PartsInterface({
+  mode,
+  config,
+  zipCode,
+  showModeIntro,
+}: {
+  mode: DemoMode;
+  config: DemoConfig;
+  zipCode: string;
+  showModeIntro: boolean;
+}) {
   const router = useRouter();
+
+  const withMode = (path: string) => {
+    const joiner = path.includes("?") ? "&" : "?";
+    return `${path}${joiner}mode=${encodeURIComponent(mode)}`;
+  };
   
   // Vehicle context
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
@@ -1193,16 +1208,63 @@ function PartsInterface({ mode, config }: { mode: DemoMode; config: DemoConfig }
                 Change
               </button>
             </div>
-            <div className="text-blue-400">ZIP: 92101</div>
+            <div className="text-blue-400">ZIP: {zipCode}</div>
           </div>
         </div>
       )}
 
       <div className="max-w-6xl mx-auto px-4 md:px-8 py-6 md:py-12">
-        
+        {/* Exec story: two demo modes */}
+        {showModeIntro && (
+          <div className="mb-8 md:mb-12">
+            <div className="max-w-3xl">
+              <h1 className="text-2xl md:text-4xl font-extralight text-neutral-900 mb-2 md:mb-3">
+                Ford Parts + Fleet Insights
+              </h1>
+              <p className="text-neutral-500 text-sm md:text-lg">
+                The honest tradeoff: a <span className="font-medium text-neutral-900">search-only parts API demo</span> is easy to ship,
+                but the real value shows up when search connects to <span className="font-medium text-neutral-900">fleet prioritization</span> and <span className="font-medium text-neutral-900">ordering</span>.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+              <div className="rounded-2xl border border-neutral-200 bg-white p-6">
+                <div className="text-xs text-neutral-500 uppercase tracking-wider mb-2">Mode A</div>
+                <div className="text-lg font-medium text-neutral-900 mb-2">Search-only (API)</div>
+                <ul className="text-sm text-neutral-600 space-y-1 mb-5">
+                  <li>- Keyword search & part detail</li>
+                  <li>- Server-side API key (no leakage)</li>
+                  <li>- Cleanest engineering commitment</li>
+                </ul>
+                <button
+                  onClick={() => router.push("/?mode=search")}
+                  className="w-full px-4 py-2.5 rounded-xl border border-neutral-900 text-neutral-900 text-sm font-medium hover:bg-neutral-900 hover:text-white transition-colors"
+                >
+                  Enter Search Demo →
+                </button>
+              </div>
+
+              <div className="rounded-2xl border border-neutral-200 bg-neutral-900 p-6 text-white">
+                <div className="text-xs text-neutral-400 uppercase tracking-wider mb-2">Mode B</div>
+                <div className="text-lg font-medium mb-2">Commerce + Insights</div>
+                <ul className="text-sm text-neutral-300 space-y-1 mb-5">
+                  <li>- Wear & tear categories + quick order</li>
+                  <li>- Fleet dashboard + outlier detection</li>
+                  <li>- Close the loop: insights → parts</li>
+                </ul>
+                <button
+                  onClick={() => router.push("/?mode=commerce")}
+                  className="w-full px-4 py-2.5 rounded-xl bg-white text-neutral-900 text-sm font-medium hover:bg-neutral-100 transition-colors"
+                >
+                  Enter Full Demo →
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {/* Hero */}
         <div className="mb-6 md:mb-12 max-w-2xl">
-          <h1 className="text-2xl md:text-4xl font-extralight text-neutral-900 mb-2 md:mb-3">{config.labels.title}</h1>
+          <h2 className="text-2xl md:text-4xl font-extralight text-neutral-900 mb-2 md:mb-3">{config.labels.title}</h2>
           <p className="text-neutral-400 text-sm md:text-lg">{config.labels.subtitle}</p>
         </div>
 
@@ -1457,7 +1519,7 @@ function PartsInterface({ mode, config }: { mode: DemoMode; config: DemoConfig }
         {/* Main Content */}
         {!searchQuery && !selectedCategory && (
           <>
-            {/* WASM Category Heroes */}
+            {/* Category Heroes */}
             <div className="mb-8 md:mb-12">
               <div className="flex items-center justify-between mb-4 md:mb-6">
                 <h2 className="text-xs text-neutral-400 uppercase tracking-wider">
@@ -1465,7 +1527,7 @@ function PartsInterface({ mode, config }: { mode: DemoMode; config: DemoConfig }
                 </h2>
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                  <span className="text-xs text-neutral-500 hidden sm:inline">WASM Accelerated</span>
+              <span className="text-xs text-neutral-500 hidden sm:inline">Interactive previews</span>
                 </div>
               </div>
               
@@ -1483,21 +1545,10 @@ function PartsInterface({ mode, config }: { mode: DemoMode; config: DemoConfig }
               </div>
             </div>
 
-            {/* Fleet Agent + Other Categories */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
-              
-              {/* Fleet Agent (Commerce mode) - Takes 2 columns on desktop */}
-              {config.features.fleet && (
-                <div className="lg:col-span-2 order-first">
-                  <h2 className="text-xs text-neutral-400 uppercase tracking-wider mb-4 md:mb-6">
-                    Maintenance Intelligence
-                  </h2>
-                  <FleetAgent />
-                </div>
-              )}
-
+            {/* More Categories + Fleet Snapshot */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
               {/* Other Categories + Quick Access */}
-              <div className={config.features.fleet ? "" : "lg:col-span-2"}>
+              <div>
                 {/* Only show non-wear categories if they exist */}
                 {CATEGORIES.filter(c => !["fluids", "filters", "brakes", "electrical", "wipers"].includes(c.id)).length > 0 && (
                   <>
@@ -1567,8 +1618,44 @@ function PartsInterface({ mode, config }: { mode: DemoMode; config: DemoConfig }
                 </div>
               </div>
 
-              {/* Fleet Summary (if no fleet mode, show fleet anyway in col 3) */}
-              {!config.features.fleet && (
+              {/* Fleet Snapshot */}
+              {config.features.fleet ? (
+                <div>
+                  <h2 className="text-xs text-neutral-400 uppercase tracking-wider mb-4 md:mb-6">
+                    Fleet Insights
+                  </h2>
+                  <div className="rounded-2xl border border-neutral-100 bg-neutral-50 p-5 md:p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <div className="text-sm font-medium text-neutral-900">Service Priority</div>
+                        <div className="text-xs text-neutral-500">See what needs attention and why</div>
+                      </div>
+                      <div className="text-xs text-neutral-500">
+                        {fleetVehicles.length} vehicles
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Link
+                        href={withMode("/dashboard")}
+                        className="rounded-xl bg-white border border-neutral-200 p-4 hover:border-neutral-400 transition-colors"
+                      >
+                        <div className="text-xs text-neutral-500 mb-1">Dashboard</div>
+                        <div className="text-sm font-medium text-neutral-900">Fleet overview →</div>
+                      </Link>
+                      <Link
+                        href={withMode("/fleet")}
+                        className="rounded-xl bg-white border border-neutral-200 p-4 hover:border-neutral-400 transition-colors"
+                      >
+                        <div className="text-xs text-neutral-500 mb-1">Risk Analysis</div>
+                        <div className="text-sm font-medium text-neutral-900">Drivers & cohorts →</div>
+                      </Link>
+                    </div>
+                    <div className="mt-4 text-xs text-neutral-500">
+                      Tip: pick a VIN to jump from insights → parts ordering.
+                    </div>
+                  </div>
+                </div>
+              ) : (
                 <div>
                   <h2 className="text-xs text-neutral-400 uppercase tracking-wider mb-6">
                     Demo Fleet
@@ -1628,7 +1715,10 @@ function PartsPageContent() {
   
   const config = DEMO_CONFIGS[mode];
   
-  return <PartsInterface mode={mode} config={config} />;
+  const zipCode = normalizeZip(searchParams.get("zipCode") || searchParams.get("zip"));
+  const showModeIntro = !modeParam;
+
+  return <PartsInterface mode={mode} config={config} zipCode={zipCode} showModeIntro={showModeIntro} />;
 }
 
 export default function PartsPage() {

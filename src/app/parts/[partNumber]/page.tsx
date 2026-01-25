@@ -35,7 +35,7 @@ function PartDetailContent() {
 
   const withMode = (path: string) => `${path}?mode=${mode}`;
 
-  // Initialize WASM for wear visualizations
+  // Initialize wear simulation engine
   useEffect(() => {
     initWearWASM().then(setWasmReady);
   }, []);
@@ -101,7 +101,7 @@ function PartDetailContent() {
     fetchPart();
   }, [partNumber, zipCode]);
 
-  // WASM Fluid Visualization
+  // Fluid Visualization
   useEffect(() => {
     if (!localPart || localPart.categoryId !== "fluids" || !fluidCanvasRef.current) return;
 
@@ -237,7 +237,7 @@ function PartDetailContent() {
       // Label
       ctx.fillStyle = "rgba(255,255,255,0.4)";
       ctx.font = "10px system-ui";
-      ctx.fillText("WASM Fluid Simulation", 15, height - 5);
+      ctx.fillText("Fluid Simulation", 15, height - 5);
 
       animationRef.current = requestAnimationFrame(animate);
     };
@@ -246,7 +246,7 @@ function PartDetailContent() {
     return () => cancelAnimationFrame(animationRef.current);
   }, [localPart, wasmReady]);
 
-  // WASM Filter Visualization
+  // Filter Visualization
   useEffect(() => {
     if (!localPart || localPart.categoryId !== "filters" || !filterCanvasRef.current) return;
 
@@ -390,7 +390,7 @@ function PartDetailContent() {
       ctx.fillStyle = "rgba(255,255,255,0.4)";
       ctx.font = "10px system-ui";
       ctx.textAlign = "right";
-      ctx.fillText("WASM Filter Simulation", width - 15, height - 5);
+      ctx.fillText("Filter Simulation", width - 15, height - 5);
       ctx.textAlign = "left";
 
       animationRef.current = requestAnimationFrame(animate);
@@ -460,7 +460,7 @@ function PartDetailContent() {
       )}
 
       <div className="max-w-5xl mx-auto px-8 py-12">
-        {/* WASM Hero for Fluids */}
+        {/* Hero for Fluids */}
         {localPart?.categoryId === "fluids" && (
           <div className="mb-12 relative">
             <div className="absolute inset-0 bg-gradient-to-br from-amber-900/20 to-neutral-900/40 rounded-2xl" />
@@ -470,7 +470,7 @@ function PartDetailContent() {
                   <div className="flex items-center gap-2 mb-4">
                     <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
                     <span className="text-xs text-amber-400 uppercase tracking-wider font-medium">
-                      {wasmReady ? "WASM Active" : "Loading WASM..."}
+                      {wasmReady ? "Simulation Ready" : "Starting..."}
                     </span>
                   </div>
                   <h2 className="text-2xl lg:text-3xl font-light text-white mb-3">
@@ -487,7 +487,7 @@ function PartDetailContent() {
                     </div>
                     <div>
                       <div className="text-neutral-300 font-medium">60 FPS</div>
-                      <div>WASM accelerated</div>
+                      <div>Smooth animation</div>
                     </div>
                     <div>
                       <div className="text-neutral-300 font-medium">{localPart.type || "Fluid"}</div>
@@ -506,7 +506,7 @@ function PartDetailContent() {
           </div>
         )}
 
-        {/* WASM Hero for Filters */}
+        {/* Hero for Filters */}
         {localPart?.categoryId === "filters" && (
           <div className="mb-12 relative">
             <div className="absolute inset-0 bg-gradient-to-br from-neutral-800/20 to-neutral-900/40 rounded-2xl" />
@@ -516,7 +516,7 @@ function PartDetailContent() {
                   <div className="flex items-center gap-2 mb-4">
                     <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
                     <span className="text-xs text-cyan-400 uppercase tracking-wider font-medium">
-                      {wasmReady ? "WASM Active" : "Loading WASM..."}
+                      {wasmReady ? "Simulation Ready" : "Starting..."}
                     </span>
                   </div>
                   <h2 className="text-2xl lg:text-3xl font-light text-white mb-3">

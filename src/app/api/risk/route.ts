@@ -1,10 +1,10 @@
 /**
- * Risk Engine API - WASM-Accelerated Risk Calculation
- * 
+ * Risk Engine API
+ *
  * POST /api/risk
- * 
- * Calculates vehicle service priority using the WASM risk engine.
- * Falls back to JavaScript implementation if WASM is unavailable.
+ *
+ * Calculates vehicle service priority using the risk engine.
+ * Falls back to JavaScript implementation if the accelerated path is unavailable.
  * 
  * Request Body:
  * {
@@ -36,7 +36,7 @@ import {
   setWeatherConditions,
 } from "@/lib/wasm/riskEngine";
 
-// Track if WASM has been initialized
+// Track whether the risk engine runtime has been initialized
 let wasmInitialized = false;
 
 async function ensureWASMLoaded(): Promise<boolean> {
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Initialize WASM
+    // Initialize risk engine runtime
     const usingWASM = await ensureWASMLoaded();
 
     // Set weather conditions if provided

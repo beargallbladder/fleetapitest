@@ -41,11 +41,11 @@ export default function WearDashboardPage() {
   const [selectedFluid, setSelectedFluid] = useState<ActiveFluidType | null>(null);
   const [selectedFilter, setSelectedFilter] = useState<FilterType | null>(null);
 
-  // Initialize WASM
+  // Initialize wear simulation engine
   useEffect(() => {
     initWearWASM().then(success => {
       setWasmReady(success);
-      console.log(success ? "[WearDashboard] WASM loaded" : "[WearDashboard] Using JS fallback");
+      console.log(success ? "[WearDashboard] Wear engine loaded" : "[WearDashboard] Using JS fallback");
     });
   }, []);
 
@@ -127,7 +127,7 @@ export default function WearDashboardPage() {
                 Fluids & Filters
               </h1>
               <p className="text-neutral-400 mt-1">
-                Real-time wear visualization powered by WASM physics
+                Real-time wear visualization for fluids and filters
               </p>
             </div>
             
@@ -135,7 +135,7 @@ export default function WearDashboardPage() {
               <div className="flex items-center gap-3 mb-2">
                 <div className={`w-2 h-2 rounded-full animate-pulse ${wasmReady ? 'bg-cyan-400' : 'bg-amber-400'}`} />
                 <span className="text-xs text-neutral-500">
-                  {wasmReady ? 'WASM Active' : 'JS Fallback'}
+                  {wasmReady ? 'Simulation Ready' : 'Starting...'}
                 </span>
               </div>
               <div 
@@ -223,7 +223,7 @@ export default function WearDashboardPage() {
               <div className="w-1 h-6 bg-amber-500 rounded-full" />
               <h2 className="text-xl font-medium text-white">Fluids</h2>
               <span className="text-xs text-neutral-500 bg-neutral-800 px-2 py-1 rounded">
-                WASM Particle Physics
+                Interactive simulation
               </span>
             </div>
             
@@ -397,7 +397,7 @@ export default function WearDashboardPage() {
 
         {/* Architecture Info */}
         <div className="mt-12 bg-white/5 backdrop-blur border border-white/10 rounded-2xl p-8">
-          <h3 className="text-lg font-medium text-white mb-4">WASM Physics Engine</h3>
+          <h3 className="text-lg font-medium text-white mb-4">Physics Engine</h3>
           
           <div className="grid grid-cols-4 gap-6">
             <div>
