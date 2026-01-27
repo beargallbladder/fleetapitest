@@ -25,6 +25,43 @@ type OpenApi = {
   paths?: Record<string, Record<string, unknown>>;
 };
 
+type Samples = {
+  vins: string[];
+  parts: string[];
+  zips: string[];
+  dealers: string[];
+  categories: string[];
+};
+
+function isZipLike(v: string) {
+  return /^\d{5}$/.test(v.trim());
+}
+
+function isVinLike(v: string) {
+  const s = v.trim().toUpperCase();
+  return s.length === 17 && /^[A-HJ-NPR-Z0-9]{17}$/.test(s);
+}
+
+function normalizeSampleResponse(json: any): Samples | null {
+  const pickArray = (keys: string[]) => {
+    for (const k of keys) {
+      const v = json?.[k];
+      if (Array.isArray(v)) return v.map((x) => String(x)).filter(Boolean);
+    }
+    return [];
+  };
+
+  const vins = pickArray(["vins", "VINs", "vin", "VIN"]);
+  const parts = pickArray(["parts", "Parts", "partNumbers", "part_numbers", "partIds", "part_ids"]);
+  const zips = pickArray(["zips", "ZIPs", "zipCodes", "zip_codes"]);
+  const dealers = pickArray(["dealers", "Dealers"]);
+  const categories = pickArray(["categories", "Categories"]);
+
+  const hasAny = vins.length || parts.length || zips.length || dealers.length || categories.length;
+  if (!hasAny) return null;
+  return { vins, parts, zips, dealers, categories };
+}
+
 function substitutePath(path: string, params: Record<string, string>) {
   const get = (k: string) => encodeURIComponent((params[k] || "").trim());
 
@@ -483,6 +520,10 @@ function ApiExplorerContent() {
   const [available, setAvailable] = useState<Set<string> | null>(null);
   const [swaggerError, setSwaggerError] = useState<string | null>(null);
 
+  const [samples, setSamples] = useState<Samples | null>(null);
+  const [samplesError, setSamplesError] = useState<string | null>(null);
+  const [lastFocusedParam, setLastFocusedParam] = useState<string | null>(null);
+
   const [selectedEndpoint, setSelectedEndpoint] = useState<Endpoint | null>(null);
   const [params, setParams] = useState<Record<string, string>>({});
   const [response, setResponse] = useState<object | null>(null);
@@ -515,6 +556,29 @@ function ApiExplorerContent() {
       }
     }
     loadSwagger();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadSamples() {
+      setSamplesError(null);
+      setSamples(null);
+
+      const r = await requestJson("/v1/samples", { method: "GET" });
+      if (!r.ok) {
+        if (!cancelled) setSamplesError("Samples are unavailable from the service.");
+        return;
+      }
+      const normalized = normalizeSampleResponse(r.json);
+      if (!cancelled) {
+        if (normalized) setSamples(normalized);
+        else setSamplesError("Samples endpoint returned no usable values.");
+      }
+    }
+    loadSamples();
     return () => {
       cancelled = true;
     };
@@ -566,6 +630,60 @@ function ApiExplorerContent() {
     setParams({});
     setResponse(null);
     setLatency(null);
+  };
+
+  const applySample = async (value: string, kind: keyof Samples) => {
+    const v = String(value);
+
+    try {
+      await navigator.clipboard.writeText(v);
+    } catch {
+      // ignore
+    }
+
+    if (!selectedEndpoint) return;
+
+    const paramNames = selectedEndpoint.params.map((p) => p.name);
+    const setParam = (k: string, val: string) => setParams((prev) => ({ ...prev, [k]: val }));
+    const setJson = (obj: unknown) => setParam("json", JSON.stringify(obj));
+
+    if (lastFocusedParam && paramNames.includes(lastFocusedParam)) {
+      if (lastFocusedParam === "json") {
+        if (kind === "vins" && selectedEndpoint.path.includes("/v1/vehicle/resolve-vin")) {
+          setJson({ vin: v });
+        } else {
+          setParam("json", v);
+        }
+      } else {
+        setParam(lastFocusedParam, v);
+      }
+      return;
+    }
+
+    if (kind === "zips" && paramNames.includes("zipCode")) return setParam("zipCode", v);
+    if (kind === "dealers" && paramNames.includes("dealerId")) return setParam("dealerId", v);
+    if (kind === "categories" && paramNames.includes("categoryId")) return setParam("categoryId", v);
+
+    if (kind === "parts") {
+      if (paramNames.includes("keyword")) return setParam("keyword", v);
+      if (paramNames.includes("partId")) return setParam("partId", v);
+      if (paramNames.includes("partNumber")) return setParam("partNumber", v);
+    }
+
+    if (kind === "vins") {
+      if (paramNames.includes("json") && selectedEndpoint.path.includes("/v1/vehicle/resolve-vin")) {
+        return setJson({ vin: v });
+      }
+      if (paramNames.includes("vin")) return setParam("vin", v);
+    }
+
+    if (paramNames.includes("keyword") && !isZipLike(v)) return setParam("keyword", v);
+    if (paramNames.includes("zipCode") && isZipLike(v)) return setParam("zipCode", v);
+    if (paramNames.includes("partId")) return setParam("partId", v);
+    if (paramNames.includes("categoryId")) return setParam("categoryId", v);
+    if (paramNames.includes("dealerId")) return setParam("dealerId", v);
+    if (paramNames.includes("id")) return setParam("id", v);
+    if (paramNames.includes("json") && isVinLike(v)) return setJson({ vin: v });
   };
 
   return (
@@ -679,6 +797,63 @@ function ApiExplorerContent() {
 
           {/* Request Builder */}
           <div className="lg:col-span-2">
+            {/* Sample values */}
+            <div className="mb-8 rounded-2xl border border-neutral-100 bg-neutral-50 p-5">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <div className="text-sm font-medium text-neutral-900">Samples</div>
+                  <div className="text-xs text-neutral-500">
+                    Click to copy. If an endpoint is selected, we’ll also auto-fill the relevant field.
+                  </div>
+                </div>
+                <div className="text-xs text-neutral-400">
+                  Source: <span className="font-mono">/v1/samples</span>
+                </div>
+              </div>
+
+              {samplesError ? (
+                <div className="text-xs text-neutral-500">{samplesError}</div>
+              ) : samples ? (
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {(
+                    [
+                      ["VINs", "vins"],
+                      ["Parts", "parts"],
+                      ["ZIPs", "zips"],
+                      ["Dealers", "dealers"],
+                      ["Categories", "categories"],
+                    ] as const
+                  ).map(([label, key]) => (
+                    <div key={key}>
+                      <div className="text-[10px] uppercase tracking-wider text-neutral-400 mb-2">{label}</div>
+                      <div className="flex flex-wrap gap-2">
+                        {samples[key].length ? (
+                          samples[key].map((v) => (
+                            <button
+                              key={v}
+                              onClick={() => applySample(v, key)}
+                              className="px-2.5 py-1 rounded-full bg-white border border-neutral-200 text-xs font-mono text-neutral-700 hover:border-neutral-400"
+                              title="Click to copy + autofill"
+                            >
+                              {v}
+                            </button>
+                          ))
+                        ) : (
+                          <div className="text-xs text-neutral-400">—</div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs text-neutral-500">Loading…</div>
+              )}
+
+              <div className="mt-4 text-[11px] text-neutral-400">
+                Note: the API key is configured server-side; it is not shown in the UI.
+              </div>
+            </div>
+
             {selectedEndpoint ? (
               <div className="space-y-8">
                 {/* Endpoint Info */}
@@ -714,6 +889,7 @@ function ApiExplorerContent() {
                             type="text"
                             value={params[param.name] || ""}
                             onChange={(e) => setParams({ ...params, [param.name]: e.target.value })}
+                            onFocus={() => setLastFocusedParam(param.name)}
                             placeholder={param.description}
                             className="w-full px-4 py-3 border border-neutral-200 rounded-lg focus:outline-none focus:border-neutral-900 text-sm"
                           />
