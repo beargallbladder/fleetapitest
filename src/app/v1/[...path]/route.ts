@@ -81,6 +81,12 @@ export async function POST(req: Request, ctx: { params: { path: string[] } }) {
   return proxy(req, upstreamPath);
 }
 
+export async function PUT(req: Request, ctx: { params: { path: string[] } }) {
+  const rest = Array.isArray(ctx.params?.path) ? ctx.params.path : [];
+  const upstreamPath = `/v1/${rest.map(encodeURIComponent).join("/")}`;
+  return proxy(req, upstreamPath);
+}
+
 export async function PATCH(req: Request, ctx: { params: { path: string[] } }) {
   const rest = Array.isArray(ctx.params?.path) ? ctx.params.path : [];
   const upstreamPath = `/v1/${rest.map(encodeURIComponent).join("/")}`;

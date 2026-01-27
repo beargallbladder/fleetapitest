@@ -3,7 +3,7 @@
 import { useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
-type Phase = "P0" | "V1" | "V2";
+type Phase = "P0" | "P1" | "P2";
 
 interface Endpoint {
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -19,15 +19,25 @@ interface Endpoint {
 }
 
 function substitutePath(path: string, params: Record<string, string>) {
-  return path
-    .replaceAll(":partId", encodeURIComponent((params.partId || "").trim()))
-    .replaceAll(":categoryId", encodeURIComponent((params.categoryId || "").trim()))
-    .replaceAll(":dealerId", encodeURIComponent((params.dealerId || "").trim()))
-    .replaceAll(":cartId", encodeURIComponent((params.cartId || "").trim()))
-    .replaceAll(":itemId", encodeURIComponent((params.itemId || "").trim()))
-    .replaceAll(":orderId", encodeURIComponent((params.orderId || "").trim()))
-    .replaceAll(":profileId", encodeURIComponent((params.profileId || "").trim()))
-    .replaceAll(":partNumber", encodeURIComponent((params.partNumber || "").trim()));
+  const get = (k: string) => encodeURIComponent((params[k] || "").trim());
+
+  // Support both `:param` and `{param}` syntaxes so the displayed path can match spec exactly.
+  const replacements: Array<[string, string]> = [
+    ["partId", get("partId")],
+    ["categoryId", get("categoryId")],
+    ["dealerId", get("dealerId")],
+    ["id", get("id")],
+    ["cartId", get("cartId")],
+    ["itemId", get("itemId")],
+    ["orderId", get("orderId")],
+    ["partNumber", get("partNumber")],
+  ];
+
+  let out = path;
+  for (const [k, v] of replacements) {
+    out = out.replaceAll(`:${k}`, v).replaceAll(`{${k}}`, v);
+  }
+  return out;
 }
 
 function buildQuery(params: Record<string, string>, allowed: string[]) {
@@ -91,7 +101,7 @@ function plannedEndpointResult(ep: Pick<Endpoint, "path" | "name" | "phase">) {
   };
 }
 
-// Updated REAL v0 / P0 endpoints (only show what's live)
+// REAL v0 P0 endpoints (live now) + roadmap (P1/P2 planned)
 const allEndpoints: Endpoint[] = [
   // Search-only (discovery)
   {
@@ -167,7 +177,11 @@ const allEndpoints: Endpoint[] = [
     live: true,
     description: "GET /v1/parts/catalog/{categoryId}",
     params: [{ name: "categoryId", type: "string", required: true, description: "Category ID" }],
-    run: runSpecEndpoint({ method: "GET", path: "/v1/parts/catalog/:categoryId", pathParamKeys: ["categoryId"] }),
+    run: runSpecEndpoint({
+      method: "GET",
+      path: "/v1/parts/catalog/{categoryId}",
+      pathParamKeys: ["categoryId"],
+    }),
   },
   {
     method: "GET",
@@ -202,7 +216,11 @@ const allEndpoints: Endpoint[] = [
     live: true,
     description: "GET /v1/parts/part-number/{partId}",
     params: [{ name: "partId", type: "string", required: true, description: "Part number or ID" }],
-    run: runSpecEndpoint({ method: "GET", path: "/v1/parts/part-number/:partId", pathParamKeys: ["partId"] }),
+    run: runSpecEndpoint({
+      method: "GET",
+      path: "/v1/parts/part-number/{partId}",
+      pathParamKeys: ["partId"],
+    }),
   },
   {
     method: "GET",
@@ -213,7 +231,11 @@ const allEndpoints: Endpoint[] = [
     live: true,
     description: "GET /v1/parts/{partId}/detail",
     params: [{ name: "partId", type: "string", required: true, description: "Part ID" }],
-    run: runSpecEndpoint({ method: "GET", path: "/v1/parts/:partId/detail", pathParamKeys: ["partId"] }),
+    run: runSpecEndpoint({
+      method: "GET",
+      path: "/v1/parts/{partId}/detail",
+      pathParamKeys: ["partId"],
+    }),
   },
   {
     method: "GET",
@@ -229,135 +251,193 @@ const allEndpoints: Endpoint[] = [
     ],
     run: runSpecEndpoint({
       method: "GET",
-      path: "/v1/parts/:partId/pricing",
+      path: "/v1/parts/{partId}/pricing",
       pathParamKeys: ["partId"],
       queryKeys: ["zipCode"],
     }),
   },
 
-  // ========= Planned roadmap (visible, not runnable) =========
-  // V1: Commerce flows (cart + checkout + orders) and dealer participation
-  {
-    method: "GET",
-    path: "/v1/dealers/:dealerId/participation",
-    name: "Dealer participation/capabilities",
-    category: "commerce",
-    phase: "V1",
-    live: false,
-    description: "GET /v1/dealers/:dealerId/participation (planned)",
-    params: [{ name: "dealerId", type: "string", required: true, description: "Dealer ID" }],
-    run: async () => plannedEndpointResult({ path: "/v1/dealers/:dealerId/participation", name: "Dealer participation/capabilities", phase: "V1" }),
-  },
+  // ========= Roadmap (P1/P2) — must match spec exactly =========
+  // P1 (planned)
   {
     method: "POST",
     path: "/v1/cart",
     name: "Create cart",
     category: "commerce",
-    phase: "V1",
+    phase: "P1",
     live: false,
     description: "POST /v1/cart (planned)",
     params: [{ name: "json", type: "json", required: false, description: "{}" }],
-    run: async () => plannedEndpointResult({ path: "/v1/cart", name: "Create cart", phase: "V1" }),
-  },
-  {
-    method: "GET",
-    path: "/v1/cart/:cartId",
-    name: "Get cart",
-    category: "commerce",
-    phase: "V1",
-    live: false,
-    description: "GET /v1/cart/:cartId (planned)",
-    params: [{ name: "cartId", type: "string", required: true, description: "Cart ID" }],
-    run: async () => plannedEndpointResult({ path: "/v1/cart/:cartId", name: "Get cart", phase: "V1" }),
+    run: async () => plannedEndpointResult({ path: "/v1/cart", name: "Create cart", phase: "P1" }),
   },
   {
     method: "POST",
-    path: "/v1/cart/:cartId/items",
+    path: "/v1/cart/{id}/items",
     name: "Add cart item",
     category: "commerce",
-    phase: "V1",
+    phase: "P1",
     live: false,
-    description: "POST /v1/cart/:cartId/items (planned)",
+    description: "POST /v1/cart/{id}/items (planned)",
     params: [
-      { name: "cartId", type: "string", required: true, description: "Cart ID" },
+      { name: "id", type: "string", required: true, description: "Cart ID" },
       { name: "json", type: "json", required: true, description: "{\"partNumber\":\"FL-500S\",\"quantity\":1}" },
     ],
-    run: async () => plannedEndpointResult({ path: "/v1/cart/:cartId/items", name: "Add cart item", phase: "V1" }),
+    run: async () => plannedEndpointResult({ path: "/v1/cart/{id}/items", name: "Add cart item", phase: "P1" }),
   },
   {
-    method: "PATCH",
-    path: "/v1/cart/:cartId/items/:itemId",
+    method: "PUT",
+    path: "/v1/cart/{id}/items/{itemId}",
     name: "Update cart item",
     category: "commerce",
-    phase: "V1",
+    phase: "P1",
     live: false,
-    description: "PATCH /v1/cart/:cartId/items/:itemId (planned)",
+    description: "PUT /v1/cart/{id}/items/{itemId} (planned)",
     params: [
-      { name: "cartId", type: "string", required: true, description: "Cart ID" },
+      { name: "id", type: "string", required: true, description: "Cart ID" },
       { name: "itemId", type: "string", required: true, description: "Item ID" },
       { name: "json", type: "json", required: true, description: "{\"quantity\":2}" },
     ],
-    run: async () => plannedEndpointResult({ path: "/v1/cart/:cartId/items/:itemId", name: "Update cart item", phase: "V1" }),
+    run: async () => plannedEndpointResult({ path: "/v1/cart/{id}/items/{itemId}", name: "Update cart item", phase: "P1" }),
+  },
+  {
+    method: "GET",
+    path: "/v1/cart/{id}",
+    name: "Get cart",
+    category: "commerce",
+    phase: "P1",
+    live: false,
+    description: "GET /v1/cart/{id} (planned)",
+    params: [{ name: "id", type: "string", required: true, description: "Cart ID" }],
+    run: async () => plannedEndpointResult({ path: "/v1/cart/{id}", name: "Get cart", phase: "P1" }),
+  },
+  {
+    method: "POST",
+    path: "/v1/cart/{id}/shipping",
+    name: "Cart shipping",
+    category: "commerce",
+    phase: "P1",
+    live: false,
+    description: "POST /v1/cart/{id}/shipping (planned)",
+    params: [
+      { name: "id", type: "string", required: true, description: "Cart ID" },
+      { name: "json", type: "json", required: false, description: "{}" },
+    ],
+    run: async () => plannedEndpointResult({ path: "/v1/cart/{id}/shipping", name: "Cart shipping", phase: "P1" }),
+  },
+  {
+    method: "POST",
+    path: "/v1/cart/{id}/tax",
+    name: "Cart tax",
+    category: "commerce",
+    phase: "P1",
+    live: false,
+    description: "POST /v1/cart/{id}/tax (planned)",
+    params: [
+      { name: "id", type: "string", required: true, description: "Cart ID" },
+      { name: "json", type: "json", required: false, description: "{}" },
+    ],
+    run: async () => plannedEndpointResult({ path: "/v1/cart/{id}/tax", name: "Cart tax", phase: "P1" }),
+  },
+  {
+    method: "POST",
+    path: "/v1/checkout/initiate",
+    name: "Checkout initiate",
+    category: "commerce",
+    phase: "P1",
+    live: false,
+    description: "POST /v1/checkout/initiate (planned)",
+    params: [{ name: "json", type: "json", required: true, description: "{\"cartId\":\"...\"}" }],
+    run: async () => plannedEndpointResult({ path: "/v1/checkout/initiate", name: "Checkout initiate", phase: "P1" }),
+  },
+  {
+    method: "POST",
+    path: "/v1/checkout/submit",
+    name: "Checkout submit",
+    category: "commerce",
+    phase: "P1",
+    live: false,
+    description: "POST /v1/checkout/submit (planned)",
+    params: [{ name: "json", type: "json", required: true, description: "{\"checkoutId\":\"...\"}" }],
+    run: async () => plannedEndpointResult({ path: "/v1/checkout/submit", name: "Checkout submit", phase: "P1" }),
+  },
+  {
+    method: "GET",
+    path: "/v1/orders/{orderId}",
+    name: "Get order details",
+    category: "commerce",
+    phase: "P1",
+    live: false,
+    description: "GET /v1/orders/{orderId} (planned)",
+    params: [{ name: "orderId", type: "string", required: true, description: "Order ID" }],
+    run: async () => plannedEndpointResult({ path: "/v1/orders/{orderId}", name: "Get order details", phase: "P1" }),
+  },
+  {
+    method: "GET",
+    path: "/v1/user/orders",
+    name: "List user orders",
+    category: "commerce",
+    phase: "P1",
+    live: false,
+    description: "GET /v1/user/orders (planned)",
+    params: [],
+    run: async () => plannedEndpointResult({ path: "/v1/user/orders", name: "List user orders", phase: "P1" }),
   },
   {
     method: "DELETE",
-    path: "/v1/cart/:cartId/items/:itemId",
-    name: "Remove cart item",
+    path: "/v1/orders/{orderId}",
+    name: "Cancel order",
     category: "commerce",
-    phase: "V1",
+    phase: "P1",
     live: false,
-    description: "DELETE /v1/cart/:cartId/items/:itemId (planned)",
-    params: [
-      { name: "cartId", type: "string", required: true, description: "Cart ID" },
-      { name: "itemId", type: "string", required: true, description: "Item ID" },
-    ],
-    run: async () => plannedEndpointResult({ path: "/v1/cart/:cartId/items/:itemId", name: "Remove cart item", phase: "V1" }),
-  },
-  {
-    method: "POST",
-    path: "/v1/checkout",
-    name: "Checkout",
-    category: "commerce",
-    phase: "V1",
-    live: false,
-    description: "POST /v1/checkout (planned)",
-    params: [{ name: "json", type: "json", required: true, description: "{\"cartId\":\"...\"}" }],
-    run: async () => plannedEndpointResult({ path: "/v1/checkout", name: "Checkout", phase: "V1" }),
-  },
-  {
-    method: "GET",
-    path: "/v1/orders/:orderId",
-    name: "Get order details",
-    category: "commerce",
-    phase: "V1",
-    live: false,
-    description: "GET /v1/orders/:orderId (planned)",
+    description: "DELETE /v1/orders/{orderId} (planned)",
     params: [{ name: "orderId", type: "string", required: true, description: "Order ID" }],
-    run: async () => plannedEndpointResult({ path: "/v1/orders/:orderId", name: "Get order details", phase: "V1" }),
+    run: async () => plannedEndpointResult({ path: "/v1/orders/{orderId}", name: "Cancel order", phase: "P1" }),
   },
 
-  // V2: Inventory overrides + admin lifecycle endpoints
+  // P2 (planned)
   {
     method: "POST",
-    path: "/v1/inventory/override",
-    name: "Create inventory override",
+    path: "/v1/track/affiliate",
+    name: "Track affiliate",
     category: "commerce",
-    phase: "V2",
+    phase: "P2",
     live: false,
-    description: "POST /v1/inventory/override (planned)",
-    params: [{ name: "json", type: "json", required: true, description: "{\"dealerId\":\"...\",\"partNumber\":\"...\"}" }],
-    run: async () => plannedEndpointResult({ path: "/v1/inventory/override", name: "Create inventory override", phase: "V2" }),
+    description: "POST /v1/track/affiliate (planned)",
+    params: [{ name: "json", type: "json", required: true, description: "{\"affiliateId\":\"...\",\"event\":\"click\"}" }],
+    run: async () => plannedEndpointResult({ path: "/v1/track/affiliate", name: "Track affiliate", phase: "P2" }),
   },
   {
     method: "GET",
-    path: "/admin/stats",
-    name: "System statistics",
+    path: "/v1/affiliates/report",
+    name: "Affiliates report",
     category: "commerce",
-    phase: "V2",
+    phase: "P2",
     live: false,
-    description: "GET /admin/stats (planned)",
+    description: "GET /v1/affiliates/report (planned)",
     params: [],
-    run: async () => plannedEndpointResult({ path: "/admin/stats", name: "System statistics", phase: "V2" }),
+    run: async () => plannedEndpointResult({ path: "/v1/affiliates/report", name: "Affiliates report", phase: "P2" }),
+  },
+  {
+    method: "POST",
+    path: "/v1/rfq",
+    name: "RFQ",
+    category: "commerce",
+    phase: "P2",
+    live: false,
+    description: "POST /v1/rfq (planned)",
+    params: [{ name: "json", type: "json", required: true, description: "{\"parts\":[...],\"notes\":\"...\"}" }],
+    run: async () => plannedEndpointResult({ path: "/v1/rfq", name: "RFQ", phase: "P2" }),
+  },
+  {
+    method: "POST",
+    path: "/v1/events/subscribe",
+    name: "Events subscribe",
+    category: "commerce",
+    phase: "P2",
+    live: false,
+    description: "POST /v1/events/subscribe (planned)",
+    params: [{ name: "json", type: "json", required: true, description: "{\"topic\":\"order.status\"}" }],
+    run: async () => plannedEndpointResult({ path: "/v1/events/subscribe", name: "Events subscribe", phase: "P2" }),
   },
 ];
 
@@ -373,7 +453,7 @@ function ApiExplorerContent() {
   const [latency, setLatency] = useState<number | null>(null);
 
   const endpoints = allEndpoints.filter((e) => mode === "commerce" || e.category === "search");
-  const phases: Phase[] = ["P0", "V1", "V2"];
+  const phases: Phase[] = ["P0", "P1", "P2"];
   const endpointsByPhase = phases.map((phase) => ({
     phase,
     endpoints: endpoints.filter((e) => e.phase === phase),
@@ -441,7 +521,7 @@ function ApiExplorerContent() {
             <div className="space-y-6">
               {endpointsByPhase.map(({ phase, endpoints: list }) => {
                 const label =
-                  phase === "P0" ? "P0 (Live)" : phase === "V1" ? "V1 (Next)" : "V2 (Later)";
+                  phase === "P0" ? "P0 (Live)" : phase === "P1" ? "P1 (Planned)" : "P2 (Planned)";
                 const subtitle =
                   phase === "P0"
                     ? "Runnable now"
