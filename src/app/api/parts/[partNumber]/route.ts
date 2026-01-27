@@ -25,18 +25,37 @@ export async function GET(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 7000);
 
-  // 1) Try upstream part details (if supported).
-  const upstreamDetailsUrl = new URL(`/v1/parts/${encodeURIComponent(pn)}`, apiBase);
+  // Prefer the REAL v0 endpoint:
+  // GET /v1/parts/part-number/{partId}  (Part + compatibility)
+  const upstreamByPartNumberUrl = new URL(
+    `/v1/parts/part-number/${encodeURIComponent(pn)}`,
+    apiBase
+  );
 
   try {
-    const detailsRes = await fetch(upstreamDetailsUrl.toString(), {
+    const byPnRes = await fetch(upstreamByPartNumberUrl.toString(), {
       headers: { "x-api-key": apiKey },
       signal: controller.signal,
       cache: "no-store",
     });
 
-    if (detailsRes.ok) {
-      const details = await detailsRes.json().catch(() => ({}));
+    if (byPnRes.ok) {
+      const details = await byPnRes.json().catch(() => ({}));
+      return NextResponse.json(details, {
+        status: 200,
+        headers: { "Cache-Control": "no-store" },
+      });
+    }
+
+    // Next best: GET /v1/parts/{partId}/detail
+    const upstreamDetailUrl = new URL(`/v1/parts/${encodeURIComponent(pn)}/detail`, apiBase);
+    const detailRes = await fetch(upstreamDetailUrl.toString(), {
+      headers: { "x-api-key": apiKey },
+      signal: controller.signal,
+      cache: "no-store",
+    });
+    if (detailRes.ok) {
+      const details = await detailRes.json().catch(() => ({}));
       return NextResponse.json(details, {
         status: 200,
         headers: { "Cache-Control": "no-store" },
