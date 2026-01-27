@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
 type Phase = "P0" | "P1" | "P2";
@@ -17,6 +17,13 @@ interface Endpoint {
   exampleRequest?: object;
   run: (params: Record<string, string>) => Promise<object>;
 }
+
+type OpenApi = {
+  openapi?: string;
+  swagger?: string;
+  info?: { title?: string; version?: string };
+  paths?: Record<string, Record<string, unknown>>;
+};
 
 function substitutePath(path: string, params: Record<string, string>) {
   const get = (k: string) => encodeURIComponent((params[k] || "").trim());
@@ -36,6 +43,28 @@ function substitutePath(path: string, params: Record<string, string>) {
   let out = path;
   for (const [k, v] of replacements) {
     out = out.replaceAll(`:${k}`, v).replaceAll(`{${k}}`, v);
+  }
+  return out;
+}
+
+function normalizePathForCompare(path: string) {
+  // Convert "/foo/:id/bar" -> "/foo/{id}/bar" to match OpenAPI style.
+  return path.replaceAll(/:([A-Za-z0-9_]+)/g, "{$1}");
+}
+
+function buildAvailableEndpointSet(spec: OpenApi): Set<string> {
+  const out = new Set<string>();
+  const paths = spec.paths || {};
+  for (const [p, ops] of Object.entries(paths)) {
+    // Never surface admin endpoints publicly.
+    if (p.startsWith("/admin")) continue;
+    if (!ops || typeof ops !== "object") continue;
+    for (const [methodLower, op] of Object.entries(ops)) {
+      if (!op) continue;
+      const m = methodLower.toUpperCase();
+      if (m !== "GET" && m !== "POST" && m !== "PUT" && m !== "PATCH" && m !== "DELETE") continue;
+      out.add(`${m} ${p}`);
+    }
   }
   return out;
 }
@@ -91,13 +120,17 @@ function runSpecEndpoint(opts: {
 }
 
 function plannedEndpointResult(ep: Pick<Endpoint, "path" | "name" | "phase">) {
+  const missing = ep.phase === "P0";
   return {
-    planned: true,
+    planned: !missing,
+    missing,
     phase: ep.phase,
     endpoint: ep.path,
     name: ep.name,
     note:
-      "Planned endpoint (not live). This UI only runs endpoints marked as Live to avoid fake calls.",
+      missing
+        ? "Expected in P0 but not present in the live Swagger spec."
+        : "Planned endpoint (not live). This UI only runs endpoints present in the live Swagger spec.",
   };
 }
 
@@ -446,13 +479,58 @@ function ApiExplorerContent() {
   const modeParam = searchParams.get("mode");
   const mode: "search" | "commerce" = modeParam === "search" ? "search" : "commerce";
 
+  const [swaggerMeta, setSwaggerMeta] = useState<{ title?: string; version?: string } | null>(null);
+  const [available, setAvailable] = useState<Set<string> | null>(null);
+  const [swaggerError, setSwaggerError] = useState<string | null>(null);
+
   const [selectedEndpoint, setSelectedEndpoint] = useState<Endpoint | null>(null);
   const [params, setParams] = useState<Record<string, string>>({});
   const [response, setResponse] = useState<object | null>(null);
   const [loading, setLoading] = useState(false);
   const [latency, setLatency] = useState<number | null>(null);
 
-  const endpoints = allEndpoints.filter((e) => mode === "commerce" || e.category === "search");
+  useEffect(() => {
+    let cancelled = false;
+    async function loadSwagger() {
+      setSwaggerError(null);
+      setAvailable(null);
+      setSwaggerMeta(null);
+
+      // Fetch OpenAPI via our /v1/* proxy so the API key stays server-side.
+      const candidates = ["/v1/openapi.json", "/v1/swagger.json", "/v1/api-docs"];
+      for (const url of candidates) {
+        const r = await requestJson(url, { method: "GET" });
+        if (r.ok && r.json && (r.json.paths || r.json.openapi || r.json.swagger)) {
+          const spec = r.json as OpenApi;
+          if (!cancelled) {
+            setAvailable(buildAvailableEndpointSet(spec));
+            setSwaggerMeta({ title: spec.info?.title, version: spec.info?.version });
+          }
+          return;
+        }
+      }
+
+      if (!cancelled) {
+        setSwaggerError("Could not load OpenAPI spec from the service.");
+      }
+    }
+    loadSwagger();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const endpoints = useMemo(() => {
+    const base = allEndpoints
+      .filter((e) => !e.path.startsWith("/admin")) // never show admin endpoints
+      .map((e) => {
+        if (!available) return e;
+        const key = `${e.method} ${normalizePathForCompare(e.path)}`;
+        return { ...e, live: available.has(key) };
+      });
+    return base.filter((e) => mode === "commerce" || e.category === "search");
+  }, [available, mode]);
+
   const phases: Phase[] = ["P0", "P1", "P2"];
   const endpointsByPhase = phases.map((phase) => ({
     phase,
@@ -503,10 +581,17 @@ function ApiExplorerContent() {
             >
               {mode === "search" ? "Search API" : "Commerce API"}
             </span>
+            <span className="text-xs text-neutral-400">
+              Source: <span className="font-mono">/v1/docs</span>
+              {swaggerMeta?.version ? ` · ${swaggerMeta.version}` : ""}
+            </span>
+            {swaggerError && (
+              <span className="text-xs text-red-600">{swaggerError}</span>
+            )}
           </div>
           <h1 className="text-4xl font-extralight text-neutral-900 mb-3">API Explorer</h1>
           <p className="text-neutral-400 text-lg">
-            Validate what’s live now and what’s coming next.
+            Roadmap view (P0/P1/P2). “Live” is validated against the service’s Swagger/OpenAPI.
           </p>
         </div>
       </div>
@@ -572,10 +657,12 @@ function ApiExplorerContent() {
                                 className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                                   selectedEndpoint === ep
                                     ? "bg-white/10 text-white"
-                                    : "bg-neutral-100 text-neutral-500"
+                                    : ep.phase === "P0"
+                                      ? "bg-red-50 text-red-700"
+                                      : "bg-neutral-100 text-neutral-500"
                                 }`}
                               >
-                                Planned
+                                {ep.phase === "P0" ? "Missing" : "Planned"}
                               </span>
                             )}
                           </div>
