@@ -3,12 +3,16 @@
 import { useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
+type Phase = "P0" | "V1" | "V2";
+
 interface Endpoint {
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
   name: string;
   description: string;
   category: "search" | "commerce";
+  phase: Phase;
+  live: boolean;
   params: { name: string; type: string; required: boolean; description: string }[];
   exampleRequest?: object;
   run: (params: Record<string, string>) => Promise<object>;
@@ -76,14 +80,38 @@ function runSpecEndpoint(opts: {
   };
 }
 
+function plannedEndpointResult(ep: Pick<Endpoint, "path" | "name" | "phase">) {
+  return {
+    planned: true,
+    phase: ep.phase,
+    endpoint: ep.path,
+    name: ep.name,
+    note:
+      "Planned endpoint (not live). This UI only runs endpoints marked as Live to avoid fake calls.",
+  };
+}
+
 // Updated REAL v0 / P0 endpoints (only show what's live)
 const allEndpoints: Endpoint[] = [
   // Search-only (discovery)
+  {
+    method: "GET",
+    path: "/v1/health",
+    name: "Health check",
+    category: "search",
+    phase: "P0",
+    live: true,
+    description: "GET /v1/health",
+    params: [],
+    run: runSpecEndpoint({ method: "GET", path: "/v1/health" }),
+  },
   {
     method: "POST",
     path: "/v1/vehicle/resolve-vin",
     name: "Decode VIN",
     category: "search",
+    phase: "P0",
+    live: true,
     description: "POST /v1/vehicle/resolve-vin",
     params: [{ name: "json", type: "json", required: true, description: "{\"vin\":\"1FTFW1E50MFA12345\"}" }],
     run: runSpecEndpoint({ method: "POST", path: "/v1/vehicle/resolve-vin", bodyKey: "json" }),
@@ -93,6 +121,8 @@ const allEndpoints: Endpoint[] = [
     path: "/v1/vehicle/resolve-mmy",
     name: "Validate MMY",
     category: "search",
+    phase: "P0",
+    live: true,
     description: "POST /v1/vehicle/resolve-mmy",
     params: [{ name: "json", type: "json", required: true, description: "{\"make\":\"Ford\",\"model\":\"F-150\",\"year\":2021}" }],
     run: runSpecEndpoint({ method: "POST", path: "/v1/vehicle/resolve-mmy", bodyKey: "json" }),
@@ -102,6 +132,8 @@ const allEndpoints: Endpoint[] = [
     path: "/v1/parts/search",
     name: "Search parts",
     category: "search",
+    phase: "P0",
+    live: true,
     description: "GET /v1/parts/search",
     params: [
       { name: "keyword", type: "string", required: true, description: "Search keyword (e.g., oil filter)" },
@@ -120,6 +152,8 @@ const allEndpoints: Endpoint[] = [
     path: "/v1/parts/catalog",
     name: "Root categories",
     category: "search",
+    phase: "P0",
+    live: true,
     description: "GET /v1/parts/catalog",
     params: [],
     run: runSpecEndpoint({ method: "GET", path: "/v1/parts/catalog" }),
@@ -129,6 +163,8 @@ const allEndpoints: Endpoint[] = [
     path: "/v1/parts/catalog/:categoryId",
     name: "Category contents",
     category: "search",
+    phase: "P0",
+    live: true,
     description: "GET /v1/parts/catalog/{categoryId}",
     params: [{ name: "categoryId", type: "string", required: true, description: "Category ID" }],
     run: runSpecEndpoint({ method: "GET", path: "/v1/parts/catalog/:categoryId", pathParamKeys: ["categoryId"] }),
@@ -138,6 +174,8 @@ const allEndpoints: Endpoint[] = [
     path: "/v1/parts/taxonomy",
     name: "Full taxonomy",
     category: "search",
+    phase: "P0",
+    live: true,
     description: "GET /v1/parts/taxonomy",
     params: [],
     run: runSpecEndpoint({ method: "GET", path: "/v1/parts/taxonomy" }),
@@ -147,6 +185,8 @@ const allEndpoints: Endpoint[] = [
     path: "/v1/dealers",
     name: "Find dealers",
     category: "search",
+    phase: "P0",
+    live: true,
     description: "GET /v1/dealers",
     params: [{ name: "zipCode", type: "string", required: false, description: "Optional ZIP code" }],
     run: runSpecEndpoint({ method: "GET", path: "/v1/dealers", queryKeys: ["zipCode"] }),
@@ -158,6 +198,8 @@ const allEndpoints: Endpoint[] = [
     path: "/v1/parts/part-number/:partId",
     name: "Part + compatibility",
     category: "commerce",
+    phase: "P0",
+    live: true,
     description: "GET /v1/parts/part-number/{partId}",
     params: [{ name: "partId", type: "string", required: true, description: "Part number or ID" }],
     run: runSpecEndpoint({ method: "GET", path: "/v1/parts/part-number/:partId", pathParamKeys: ["partId"] }),
@@ -167,6 +209,8 @@ const allEndpoints: Endpoint[] = [
     path: "/v1/parts/:partId/detail",
     name: "Part details",
     category: "commerce",
+    phase: "P0",
+    live: true,
     description: "GET /v1/parts/{partId}/detail",
     params: [{ name: "partId", type: "string", required: true, description: "Part ID" }],
     run: runSpecEndpoint({ method: "GET", path: "/v1/parts/:partId/detail", pathParamKeys: ["partId"] }),
@@ -176,6 +220,8 @@ const allEndpoints: Endpoint[] = [
     path: "/v1/parts/:partId/pricing",
     name: "Dealer pricing",
     category: "commerce",
+    phase: "P0",
+    live: true,
     description: "GET /v1/parts/{partId}/pricing",
     params: [
       { name: "partId", type: "string", required: true, description: "Part ID" },
@@ -187,6 +233,131 @@ const allEndpoints: Endpoint[] = [
       pathParamKeys: ["partId"],
       queryKeys: ["zipCode"],
     }),
+  },
+
+  // ========= Planned roadmap (visible, not runnable) =========
+  // V1: Commerce flows (cart + checkout + orders) and dealer participation
+  {
+    method: "GET",
+    path: "/v1/dealers/:dealerId/participation",
+    name: "Dealer participation/capabilities",
+    category: "commerce",
+    phase: "V1",
+    live: false,
+    description: "GET /v1/dealers/:dealerId/participation (planned)",
+    params: [{ name: "dealerId", type: "string", required: true, description: "Dealer ID" }],
+    run: async () => plannedEndpointResult({ path: "/v1/dealers/:dealerId/participation", name: "Dealer participation/capabilities", phase: "V1" }),
+  },
+  {
+    method: "POST",
+    path: "/v1/cart",
+    name: "Create cart",
+    category: "commerce",
+    phase: "V1",
+    live: false,
+    description: "POST /v1/cart (planned)",
+    params: [{ name: "json", type: "json", required: false, description: "{}" }],
+    run: async () => plannedEndpointResult({ path: "/v1/cart", name: "Create cart", phase: "V1" }),
+  },
+  {
+    method: "GET",
+    path: "/v1/cart/:cartId",
+    name: "Get cart",
+    category: "commerce",
+    phase: "V1",
+    live: false,
+    description: "GET /v1/cart/:cartId (planned)",
+    params: [{ name: "cartId", type: "string", required: true, description: "Cart ID" }],
+    run: async () => plannedEndpointResult({ path: "/v1/cart/:cartId", name: "Get cart", phase: "V1" }),
+  },
+  {
+    method: "POST",
+    path: "/v1/cart/:cartId/items",
+    name: "Add cart item",
+    category: "commerce",
+    phase: "V1",
+    live: false,
+    description: "POST /v1/cart/:cartId/items (planned)",
+    params: [
+      { name: "cartId", type: "string", required: true, description: "Cart ID" },
+      { name: "json", type: "json", required: true, description: "{\"partNumber\":\"FL-500S\",\"quantity\":1}" },
+    ],
+    run: async () => plannedEndpointResult({ path: "/v1/cart/:cartId/items", name: "Add cart item", phase: "V1" }),
+  },
+  {
+    method: "PATCH",
+    path: "/v1/cart/:cartId/items/:itemId",
+    name: "Update cart item",
+    category: "commerce",
+    phase: "V1",
+    live: false,
+    description: "PATCH /v1/cart/:cartId/items/:itemId (planned)",
+    params: [
+      { name: "cartId", type: "string", required: true, description: "Cart ID" },
+      { name: "itemId", type: "string", required: true, description: "Item ID" },
+      { name: "json", type: "json", required: true, description: "{\"quantity\":2}" },
+    ],
+    run: async () => plannedEndpointResult({ path: "/v1/cart/:cartId/items/:itemId", name: "Update cart item", phase: "V1" }),
+  },
+  {
+    method: "DELETE",
+    path: "/v1/cart/:cartId/items/:itemId",
+    name: "Remove cart item",
+    category: "commerce",
+    phase: "V1",
+    live: false,
+    description: "DELETE /v1/cart/:cartId/items/:itemId (planned)",
+    params: [
+      { name: "cartId", type: "string", required: true, description: "Cart ID" },
+      { name: "itemId", type: "string", required: true, description: "Item ID" },
+    ],
+    run: async () => plannedEndpointResult({ path: "/v1/cart/:cartId/items/:itemId", name: "Remove cart item", phase: "V1" }),
+  },
+  {
+    method: "POST",
+    path: "/v1/checkout",
+    name: "Checkout",
+    category: "commerce",
+    phase: "V1",
+    live: false,
+    description: "POST /v1/checkout (planned)",
+    params: [{ name: "json", type: "json", required: true, description: "{\"cartId\":\"...\"}" }],
+    run: async () => plannedEndpointResult({ path: "/v1/checkout", name: "Checkout", phase: "V1" }),
+  },
+  {
+    method: "GET",
+    path: "/v1/orders/:orderId",
+    name: "Get order details",
+    category: "commerce",
+    phase: "V1",
+    live: false,
+    description: "GET /v1/orders/:orderId (planned)",
+    params: [{ name: "orderId", type: "string", required: true, description: "Order ID" }],
+    run: async () => plannedEndpointResult({ path: "/v1/orders/:orderId", name: "Get order details", phase: "V1" }),
+  },
+
+  // V2: Inventory overrides + admin lifecycle endpoints
+  {
+    method: "POST",
+    path: "/v1/inventory/override",
+    name: "Create inventory override",
+    category: "commerce",
+    phase: "V2",
+    live: false,
+    description: "POST /v1/inventory/override (planned)",
+    params: [{ name: "json", type: "json", required: true, description: "{\"dealerId\":\"...\",\"partNumber\":\"...\"}" }],
+    run: async () => plannedEndpointResult({ path: "/v1/inventory/override", name: "Create inventory override", phase: "V2" }),
+  },
+  {
+    method: "GET",
+    path: "/admin/stats",
+    name: "System statistics",
+    category: "commerce",
+    phase: "V2",
+    live: false,
+    description: "GET /admin/stats (planned)",
+    params: [],
+    run: async () => plannedEndpointResult({ path: "/admin/stats", name: "System statistics", phase: "V2" }),
   },
 ];
 
@@ -202,10 +373,21 @@ function ApiExplorerContent() {
   const [latency, setLatency] = useState<number | null>(null);
 
   const endpoints = allEndpoints.filter((e) => mode === "commerce" || e.category === "search");
+  const phases: Phase[] = ["P0", "V1", "V2"];
+  const endpointsByPhase = phases.map((phase) => ({
+    phase,
+    endpoints: endpoints.filter((e) => e.phase === phase),
+  }));
 
   const runEndpoint = async () => {
     if (!selectedEndpoint) return;
     
+    if (!selectedEndpoint.live) {
+      setLatency(0);
+      setResponse(plannedEndpointResult(selectedEndpoint));
+      return;
+    }
+
     setLoading(true);
     setResponse(null);
     const start = performance.now();
@@ -244,7 +426,7 @@ function ApiExplorerContent() {
           </div>
           <h1 className="text-4xl font-extralight text-neutral-900 mb-3">API Explorer</h1>
           <p className="text-neutral-400 text-lg">
-            Test live endpoints backed by the upstream parts provider
+            Validate what’s live now and what’s coming next.
           </p>
         </div>
       </div>
@@ -254,39 +436,76 @@ function ApiExplorerContent() {
           
           {/* Endpoints List */}
           <div>
-            <h2 className="text-xs text-neutral-400 uppercase tracking-wider mb-4">Endpoints</h2>
-            <div className="space-y-2">
-              {endpoints.map((ep, i) => (
-                <button
-                  key={i}
-                  onClick={() => selectEndpoint(ep)}
-                  className={`w-full text-left p-4 rounded-xl transition-all ${
-                    selectedEndpoint === ep 
-                      ? "bg-neutral-900 text-white" 
-                      : "hover:bg-neutral-50 border border-neutral-100"
-                  }`}
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
-                      ep.method === "GET" 
-                        ? selectedEndpoint === ep ? "bg-green-500 text-white" : "bg-green-100 text-green-700"
-                        : selectedEndpoint === ep ? "bg-blue-500 text-white" : "bg-blue-100 text-blue-700"
-                    }`}>
-                      {ep.method}
-                    </span>
-                    <span className={`text-sm font-medium ${
-                      selectedEndpoint === ep ? "text-white" : "text-neutral-900"
-                    }`}>
-                      {ep.name}
-                    </span>
+            <h2 className="text-xs text-neutral-400 uppercase tracking-wider mb-4">Roadmap</h2>
+
+            <div className="space-y-6">
+              {endpointsByPhase.map(({ phase, endpoints: list }) => {
+                const label =
+                  phase === "P0" ? "P0 (Live)" : phase === "V1" ? "V1 (Next)" : "V2 (Later)";
+                const subtitle =
+                  phase === "P0"
+                    ? "Runnable now"
+                    : "Visible only (not runnable)";
+                return (
+                  <div key={phase}>
+                    <div className="flex items-baseline justify-between mb-2">
+                      <div>
+                        <div className="text-sm font-medium text-neutral-900">{label}</div>
+                        <div className="text-xs text-neutral-400">{subtitle}</div>
+                      </div>
+                      <div className="text-xs text-neutral-400">{list.length}</div>
+                    </div>
+                    <div className="space-y-2">
+                      {list.map((ep, i) => (
+                        <button
+                          key={`${phase}-${i}`}
+                          onClick={() => selectEndpoint(ep)}
+                          className={`w-full text-left p-4 rounded-xl transition-all ${
+                            selectedEndpoint === ep
+                              ? "bg-neutral-900 text-white"
+                              : "hover:bg-neutral-50 border border-neutral-100"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 mb-1">
+                            <span
+                              className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                                ep.method === "GET"
+                                  ? selectedEndpoint === ep
+                                    ? "bg-green-500 text-white"
+                                    : "bg-green-100 text-green-700"
+                                  : selectedEndpoint === ep
+                                    ? "bg-blue-500 text-white"
+                                    : "bg-blue-100 text-blue-700"
+                              }`}
+                            >
+                              {ep.method}
+                            </span>
+                            <span
+                              className={`text-sm font-medium ${
+                                selectedEndpoint === ep ? "text-white" : "text-neutral-900"
+                              }`}
+                            >
+                              {ep.name}
+                            </span>
+                            {!ep.live && (
+                              <span
+                                className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                  selectedEndpoint === ep
+                                    ? "bg-white/10 text-white"
+                                    : "bg-neutral-100 text-neutral-500"
+                                }`}
+                              >
+                                Planned
+                              </span>
+                            )}
+                          </div>
+                          <code className="text-xs font-mono text-neutral-400">{ep.path}</code>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <code className={`text-xs font-mono ${
-                    selectedEndpoint === ep ? "text-neutral-400" : "text-neutral-400"
-                  }`}>
-                    {ep.path}
-                  </code>
-                </button>
-              ))}
+                );
+              })}
             </div>
 
           </div>
@@ -340,10 +559,10 @@ function ApiExplorerContent() {
                 {/* Run Button */}
                 <button
                   onClick={runEndpoint}
-                  disabled={loading}
+                  disabled={loading || !selectedEndpoint.live}
                   className="px-6 py-3 bg-neutral-900 text-white rounded-lg hover:bg-neutral-800 disabled:opacity-50 text-sm font-medium"
                 >
-                  {loading ? "Running..." : "Run Request"}
+                  {!selectedEndpoint.live ? "Planned (not runnable)" : loading ? "Running..." : "Run Request"}
                 </button>
 
                 {/* Response */}

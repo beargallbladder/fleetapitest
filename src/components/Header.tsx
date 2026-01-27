@@ -99,17 +99,6 @@ function HeaderContent() {
           >
             API
           </Link>
-          
-          <Link
-            href={withMode("/docs")}
-            className={`text-sm transition-colors ${
-              isActive("/docs") 
-                ? "text-neutral-900 font-medium" 
-                : "text-neutral-400 hover:text-neutral-900"
-            }`}
-          >
-            Docs
-          </Link>
         </div>
 
         {/* Right */}
