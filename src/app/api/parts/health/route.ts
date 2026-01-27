@@ -8,29 +8,22 @@ function jsonError(message: string, status = 500) {
 
 export async function GET() {
   const apiBase = process.env.JERICHO_API_BASE || "https://jericho-api-48gl.onrender.com";
-  const apiKey = process.env.JERICHO_API_KEY;
-  if (!apiKey) return jsonError("Server missing JERICHO_API_KEY", 500);
-
-  // Per spec: GET /v1/parts/catalog
-  const upstreamUrl = new URL("/v1/parts/catalog", apiBase);
+  const upstreamUrl = new URL("/v1/health", apiBase);
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
+  const timeout = setTimeout(() => controller.abort(), 5000);
 
   try {
     const res = await fetch(upstreamUrl.toString(), {
-      headers: { "x-api-key": apiKey },
       signal: controller.signal,
       cache: "no-store",
     });
 
-    const body = await res.arrayBuffer();
-    const headers = new Headers();
-    const ct = res.headers.get("content-type");
-    if (ct) headers.set("content-type", ct);
-    headers.set("cache-control", "no-store");
-
-    return new NextResponse(body, { status: res.status, headers });
+    const data = await res.json().catch(() => ({}));
+    return NextResponse.json(data, {
+      status: res.status,
+      headers: { "Cache-Control": "no-store" },
+    });
   } catch (e: unknown) {
     const msg =
       e instanceof Error && e.name === "AbortError"

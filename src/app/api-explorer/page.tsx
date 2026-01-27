@@ -1,16 +1,29 @@
 "use client";
 
 import { useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 
 interface Endpoint {
-  method: "GET" | "POST" | "PUT" | "DELETE";
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
   name: string;
   description: string;
-  category: "parts";
+  category: "search" | "commerce";
   params: { name: string; type: string; required: boolean; description: string }[];
   exampleRequest?: object;
   run: (params: Record<string, string>) => Promise<object>;
+}
+
+function substitutePath(path: string, params: Record<string, string>) {
+  return path
+    .replaceAll(":partId", encodeURIComponent((params.partId || "").trim()))
+    .replaceAll(":categoryId", encodeURIComponent((params.categoryId || "").trim()))
+    .replaceAll(":dealerId", encodeURIComponent((params.dealerId || "").trim()))
+    .replaceAll(":cartId", encodeURIComponent((params.cartId || "").trim()))
+    .replaceAll(":itemId", encodeURIComponent((params.itemId || "").trim()))
+    .replaceAll(":orderId", encodeURIComponent((params.orderId || "").trim()))
+    .replaceAll(":profileId", encodeURIComponent((params.profileId || "").trim()))
+    .replaceAll(":partNumber", encodeURIComponent((params.partNumber || "").trim()));
 }
 
 function buildQuery(params: Record<string, string>, allowed: string[]) {
@@ -22,77 +35,396 @@ function buildQuery(params: Record<string, string>, allowed: string[]) {
   return qs.toString();
 }
 
-async function fetchJson(path: string) {
-  const res = await fetch(path, { method: "GET", cache: "no-store" });
-  const json = await res.json().catch(() => ({}));
-  return {
-    ok: res.ok,
-    status: res.status,
-    json,
+async function requestJson(path: string, init?: RequestInit) {
+  const res = await fetch(path, { cache: "no-store", ...init });
+  const text = await res.text().catch(() => "");
+  let json: any = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = { raw: text };
+  }
+  return { ok: res.ok, status: res.status, json };
+}
+
+function runSpecEndpoint(opts: {
+  method: Endpoint["method"];
+  path: string;
+  pathParamKeys?: string[];
+  queryKeys?: string[];
+  bodyKey?: string; // expects params[bodyKey] to be JSON string
+}) {
+  return async (params: Record<string, string>) => {
+    // validate required path params
+    for (const k of opts.pathParamKeys || []) {
+      if (!String(params[k] || "").trim()) return { error: `Missing required param: ${k}` };
+    }
+
+    const substituted = substitutePath(opts.path, params);
+    const qs = (opts.queryKeys && opts.queryKeys.length > 0) ? buildQuery(params, opts.queryKeys) : "";
+    const url = qs ? `${substituted}?${qs}` : substituted;
+
+    const init: RequestInit = { method: opts.method };
+    if (opts.method !== "GET" && opts.method !== "DELETE") {
+      init.headers = { "Content-Type": "application/json" };
+      const bodyRaw = opts.bodyKey ? (params[opts.bodyKey] || "").trim() : "";
+      init.body = bodyRaw || "{}";
+    }
+
+    const r = await requestJson(url, init);
+    return r.ok ? r.json : { error: r.json?.error || "Request failed", status: r.status, details: r.json };
   };
 }
 
-// Real (server) endpoints backed by the upstream parts provider
+// Spec-backed endpoints (proxied through our /v1/* route so calls are real)
 const allEndpoints: Endpoint[] = [
+  // Health & System
   {
     method: "GET",
-    path: "/api/parts/catalog",
-    name: "Get Catalog",
-    category: "parts",
-    description: "Proxies the upstream catalog endpoint.",
+    path: "/v1/health",
+    name: "Health check",
+    category: "search",
+    description: "GET /v1/health",
     params: [],
-    run: async () => {
-      const r = await fetchJson("/api/parts/catalog");
-      return r.ok ? r.json : { error: r.json?.error || "Request failed", status: r.status };
-    },
+    run: runSpecEndpoint({ method: "GET", path: "/v1/health" }),
+  },
+
+  // Vehicle Resolution
+  {
+    method: "POST",
+    path: "/v1/vehicle/resolve-vin",
+    name: "Resolve vehicle by VIN",
+    category: "search",
+    description: "POST /v1/vehicle/resolve-vin",
+    params: [{ name: "json", type: "json", required: true, description: "{\"vin\":\"1FTFW1E50MFA12345\"}" }],
+    run: runSpecEndpoint({ method: "POST", path: "/v1/vehicle/resolve-vin", bodyKey: "json" }),
+  },
+  {
+    method: "POST",
+    path: "/v1/vehicle/resolve-mmy",
+    name: "Resolve vehicle by MMY",
+    category: "search",
+    description: "POST /v1/vehicle/resolve-mmy",
+    params: [{ name: "json", type: "json", required: true, description: "{\"make\":\"Ford\",\"model\":\"F-150\",\"year\":2021}" }],
+    run: runSpecEndpoint({ method: "POST", path: "/v1/vehicle/resolve-mmy", bodyKey: "json" }),
+  },
+
+  // Parts Catalog
+  {
+    method: "GET",
+    path: "/v1/parts/taxonomy",
+    name: "Get parts taxonomy",
+    category: "search",
+    description: "GET /v1/parts/taxonomy",
+    params: [],
+    run: runSpecEndpoint({ method: "GET", path: "/v1/parts/taxonomy" }),
   },
   {
     method: "GET",
-    path: "/api/parts/search",
-    name: "Search Parts",
-    category: "parts",
-    description: "Search parts via upstream provider (proxied server-side).",
+    path: "/v1/parts/search",
+    name: "Search for parts",
+    category: "search",
+    description: "GET /v1/parts/search",
     params: [
       { name: "keyword", type: "string", required: true, description: "Search keyword or part number" },
-      { name: "zipCode", type: "string", required: true, description: "ZIP code for dealer availability/pricing" },
+      { name: "zipCode", type: "string", required: true, description: "ZIP code (e.g., 48126)" },
       { name: "page", type: "number", required: false, description: "Page number (default: 1)" },
       { name: "pageSize", type: "number", required: false, description: "Page size (default: 10)" },
     ],
-    run: async (params) => {
-      const qs = buildQuery(params, ["keyword", "zipCode", "page", "pageSize"]);
-      const r = await fetchJson(`/api/parts/search?${qs}`);
-      return r.ok ? r.json : { error: r.json?.error || "Request failed", status: r.status };
-    },
+    run: runSpecEndpoint({
+      method: "GET",
+      path: "/v1/parts/search",
+      queryKeys: ["keyword", "zipCode", "page", "pageSize"],
+    }),
   },
   {
     method: "GET",
-    path: "/api/parts/{partNumber}",
-    name: "Get Part Details",
-    category: "parts",
-    description: "Fetch a single part by part number (proxied server-side).",
+    path: "/v1/parts/:partId/detail",
+    name: "Get part details",
+    category: "search",
+    description: "GET /v1/parts/:partId/detail",
     params: [
-      { name: "partNumber", type: "string", required: true, description: "Part number (e.g., 'FL-500S')" },
-      { name: "zipCode", type: "string", required: false, description: "ZIP code (used if fallback search is needed)" },
+      { name: "partId", type: "string", required: true, description: "Part ID" },
+      { name: "zipCode", type: "string", required: false, description: "Optional ZIP code" },
     ],
-    run: async (params) => {
-      const pn = (params.partNumber || "").trim();
-      if (!pn) return { error: "Missing required param: partNumber" };
-      const zip = (params.zipCode || "").trim();
-      const qs = zip ? `?${new URLSearchParams({ zipCode: zip }).toString()}` : "";
-      const r = await fetchJson(`/api/parts/${encodeURIComponent(pn)}${qs}`);
-      return r.ok ? r.json : { error: r.json?.error || "Request failed", status: r.status };
-    },
+    run: runSpecEndpoint({
+      method: "GET",
+      path: "/v1/parts/:partId/detail",
+      pathParamKeys: ["partId"],
+      queryKeys: ["zipCode"],
+    }),
+  },
+  {
+    method: "GET",
+    path: "/v1/parts/:partId/pricing",
+    name: "Get part pricing",
+    category: "search",
+    description: "GET /v1/parts/:partId/pricing",
+    params: [
+      { name: "partId", type: "string", required: true, description: "Part ID" },
+      { name: "dealerId", type: "string", required: false, description: "Optional dealer ID" },
+      { name: "zipCode", type: "string", required: false, description: "Optional ZIP code" },
+    ],
+    run: runSpecEndpoint({
+      method: "GET",
+      path: "/v1/parts/:partId/pricing",
+      pathParamKeys: ["partId"],
+      queryKeys: ["dealerId", "zipCode"],
+    }),
+  },
+  {
+    method: "GET",
+    path: "/v1/parts/catalog",
+    name: "Browse full catalog",
+    category: "search",
+    description: "GET /v1/parts/catalog",
+    params: [],
+    run: runSpecEndpoint({ method: "GET", path: "/v1/parts/catalog" }),
+  },
+  {
+    method: "GET",
+    path: "/v1/parts/catalog/:categoryId",
+    name: "Browse catalog by category",
+    category: "search",
+    description: "GET /v1/parts/catalog/:categoryId",
+    params: [{ name: "categoryId", type: "string", required: true, description: "Category ID" }],
+    run: runSpecEndpoint({ method: "GET", path: "/v1/parts/catalog/:categoryId", pathParamKeys: ["categoryId"] }),
+  },
+
+  // Dealers
+  {
+    method: "GET",
+    path: "/v1/dealers",
+    name: "List dealers",
+    category: "search",
+    description: "GET /v1/dealers",
+    params: [{ name: "zipCode", type: "string", required: false, description: "Optional ZIP code" }],
+    run: runSpecEndpoint({ method: "GET", path: "/v1/dealers", queryKeys: ["zipCode"] }),
+  },
+  {
+    method: "GET",
+    path: "/v1/dealers/:dealerId/participation",
+    name: "Dealer participation",
+    category: "search",
+    description: "GET /v1/dealers/:dealerId/participation",
+    params: [{ name: "dealerId", type: "string", required: true, description: "Dealer ID" }],
+    run: runSpecEndpoint({
+      method: "GET",
+      path: "/v1/dealers/:dealerId/participation",
+      pathParamKeys: ["dealerId"],
+    }),
+  },
+
+  // Cart Management (commerce)
+  {
+    method: "POST",
+    path: "/v1/cart",
+    name: "Create new cart",
+    category: "commerce",
+    description: "POST /v1/cart",
+    params: [{ name: "json", type: "json", required: false, description: "{}" }],
+    run: runSpecEndpoint({ method: "POST", path: "/v1/cart", bodyKey: "json" }),
+  },
+  {
+    method: "GET",
+    path: "/v1/cart/:cartId",
+    name: "Get cart details",
+    category: "commerce",
+    description: "GET /v1/cart/:cartId",
+    params: [{ name: "cartId", type: "string", required: true, description: "Cart ID" }],
+    run: runSpecEndpoint({ method: "GET", path: "/v1/cart/:cartId", pathParamKeys: ["cartId"] }),
+  },
+  {
+    method: "POST",
+    path: "/v1/cart/:cartId/items",
+    name: "Add item to cart",
+    category: "commerce",
+    description: "POST /v1/cart/:cartId/items",
+    params: [
+      { name: "cartId", type: "string", required: true, description: "Cart ID" },
+      { name: "json", type: "json", required: true, description: "{\"partNumber\":\"FL-500S\",\"quantity\":1}" },
+    ],
+    run: runSpecEndpoint({ method: "POST", path: "/v1/cart/:cartId/items", pathParamKeys: ["cartId"], bodyKey: "json" }),
+  },
+  {
+    method: "PATCH",
+    path: "/v1/cart/:cartId/items/:itemId",
+    name: "Update cart item",
+    category: "commerce",
+    description: "PATCH /v1/cart/:cartId/items/:itemId",
+    params: [
+      { name: "cartId", type: "string", required: true, description: "Cart ID" },
+      { name: "itemId", type: "string", required: true, description: "Item ID" },
+      { name: "json", type: "json", required: true, description: "{\"quantity\":2}" },
+    ],
+    run: runSpecEndpoint({
+      method: "PATCH",
+      path: "/v1/cart/:cartId/items/:itemId",
+      pathParamKeys: ["cartId", "itemId"],
+      bodyKey: "json",
+    }),
+  },
+  {
+    method: "DELETE",
+    path: "/v1/cart/:cartId/items/:itemId",
+    name: "Remove cart item",
+    category: "commerce",
+    description: "DELETE /v1/cart/:cartId/items/:itemId",
+    params: [
+      { name: "cartId", type: "string", required: true, description: "Cart ID" },
+      { name: "itemId", type: "string", required: true, description: "Item ID" },
+    ],
+    run: runSpecEndpoint({
+      method: "DELETE",
+      path: "/v1/cart/:cartId/items/:itemId",
+      pathParamKeys: ["cartId", "itemId"],
+    }),
+  },
+  {
+    method: "POST",
+    path: "/v1/cart/:cartId/validate",
+    name: "Validate cart",
+    category: "commerce",
+    description: "POST /v1/cart/:cartId/validate",
+    params: [
+      { name: "cartId", type: "string", required: true, description: "Cart ID" },
+      { name: "json", type: "json", required: false, description: "{}" },
+    ],
+    run: runSpecEndpoint({ method: "POST", path: "/v1/cart/:cartId/validate", pathParamKeys: ["cartId"], bodyKey: "json" }),
+  },
+  {
+    method: "POST",
+    path: "/v1/cart/:cartId/reserve",
+    name: "Reserve inventory",
+    category: "commerce",
+    description: "POST /v1/cart/:cartId/reserve",
+    params: [
+      { name: "cartId", type: "string", required: true, description: "Cart ID" },
+      { name: "json", type: "json", required: false, description: "{}" },
+    ],
+    run: runSpecEndpoint({ method: "POST", path: "/v1/cart/:cartId/reserve", pathParamKeys: ["cartId"], bodyKey: "json" }),
+  },
+  {
+    method: "DELETE",
+    path: "/v1/cart/:cartId/reserve",
+    name: "Release reservation",
+    category: "commerce",
+    description: "DELETE /v1/cart/:cartId/reserve",
+    params: [{ name: "cartId", type: "string", required: true, description: "Cart ID" }],
+    run: runSpecEndpoint({ method: "DELETE", path: "/v1/cart/:cartId/reserve", pathParamKeys: ["cartId"] }),
+  },
+  {
+    method: "GET",
+    path: "/v1/cart/:cartId/fulfillment",
+    name: "Fulfillment options for cart",
+    category: "commerce",
+    description: "GET /v1/cart/:cartId/fulfillment",
+    params: [{ name: "cartId", type: "string", required: true, description: "Cart ID" }],
+    run: runSpecEndpoint({ method: "GET", path: "/v1/cart/:cartId/fulfillment", pathParamKeys: ["cartId"] }),
+  },
+
+  // Checkout & Orders
+  {
+    method: "POST",
+    path: "/v1/checkout",
+    name: "Process checkout",
+    category: "commerce",
+    description: "POST /v1/checkout",
+    params: [{ name: "json", type: "json", required: true, description: "{\"cartId\":\"...\"}" }],
+    run: runSpecEndpoint({ method: "POST", path: "/v1/checkout", bodyKey: "json" }),
+  },
+  {
+    method: "GET",
+    path: "/v1/orders/:orderId",
+    name: "Get order details",
+    category: "commerce",
+    description: "GET /v1/orders/:orderId",
+    params: [{ name: "orderId", type: "string", required: true, description: "Order ID" }],
+    run: runSpecEndpoint({ method: "GET", path: "/v1/orders/:orderId", pathParamKeys: ["orderId"] }),
+  },
+
+  // User Profiles
+  {
+    method: "POST",
+    path: "/v1/user/profile",
+    name: "Create user profile",
+    category: "commerce",
+    description: "POST /v1/user/profile",
+    params: [{ name: "json", type: "json", required: true, description: "{\"email\":\"exec@company.com\"}" }],
+    run: runSpecEndpoint({ method: "POST", path: "/v1/user/profile", bodyKey: "json" }),
+  },
+  {
+    method: "GET",
+    path: "/v1/user/profile/:profileId",
+    name: "Get user profile",
+    category: "commerce",
+    description: "GET /v1/user/profile/:profileId",
+    params: [{ name: "profileId", type: "string", required: true, description: "Profile ID" }],
+    run: runSpecEndpoint({ method: "GET", path: "/v1/user/profile/:profileId", pathParamKeys: ["profileId"] }),
+  },
+  {
+    method: "PATCH",
+    path: "/v1/user/profile/:profileId",
+    name: "Update user profile",
+    category: "commerce",
+    description: "PATCH /v1/user/profile/:profileId",
+    params: [
+      { name: "profileId", type: "string", required: true, description: "Profile ID" },
+      { name: "json", type: "json", required: true, description: "{\"preferredDealerId\":\"...\"}" },
+    ],
+    run: runSpecEndpoint({ method: "PATCH", path: "/v1/user/profile/:profileId", pathParamKeys: ["profileId"], bodyKey: "json" }),
+  },
+  {
+    method: "POST",
+    path: "/v1/user/profile/:profileId/preferred-dealer",
+    name: "Set preferred dealer",
+    category: "commerce",
+    description: "POST /v1/user/profile/:profileId/preferred-dealer",
+    params: [
+      { name: "profileId", type: "string", required: true, description: "Profile ID" },
+      { name: "json", type: "json", required: true, description: "{\"dealerId\":\"...\"}" },
+    ],
+    run: runSpecEndpoint({
+      method: "POST",
+      path: "/v1/user/profile/:profileId/preferred-dealer",
+      pathParamKeys: ["profileId"],
+      bodyKey: "json",
+    }),
+  },
+
+  // Fulfillment & Pricing
+  {
+    method: "POST",
+    path: "/v1/fulfillment/check",
+    name: "Check fulfillment availability",
+    category: "commerce",
+    description: "POST /v1/fulfillment/check",
+    params: [{ name: "json", type: "json", required: true, description: "{\"zipCode\":\"48126\",\"items\":[...]}" }],
+    run: runSpecEndpoint({ method: "POST", path: "/v1/fulfillment/check", bodyKey: "json" }),
+  },
+  {
+    method: "POST",
+    path: "/v1/pricing/calculate",
+    name: "Calculate pricing",
+    category: "commerce",
+    description: "POST /v1/pricing/calculate",
+    params: [{ name: "json", type: "json", required: true, description: "{\"items\":[...],\"profileId\":\"...\"}" }],
+    run: runSpecEndpoint({ method: "POST", path: "/v1/pricing/calculate", bodyKey: "json" }),
   },
 ];
 
 function ApiExplorerContent() {
+  const searchParams = useSearchParams();
+  const modeParam = searchParams.get("mode");
+  const mode: "search" | "commerce" = modeParam === "search" ? "search" : "commerce";
+
   const [selectedEndpoint, setSelectedEndpoint] = useState<Endpoint | null>(null);
   const [params, setParams] = useState<Record<string, string>>({});
   const [response, setResponse] = useState<object | null>(null);
   const [loading, setLoading] = useState(false);
   const [latency, setLatency] = useState<number | null>(null);
 
-  const endpoints = allEndpoints;
+  const endpoints = allEndpoints.filter((e) => mode === "commerce" || e.category === "search");
 
   const runEndpoint = async () => {
     if (!selectedEndpoint) return;
@@ -125,8 +457,12 @@ function ApiExplorerContent() {
       <div className="border-b border-neutral-100">
         <div className="max-w-6xl mx-auto px-8 py-12">
           <div className="flex items-center gap-3 mb-4">
-            <span className="text-xs px-2 py-1 rounded-full font-medium bg-neutral-900 text-white">
-              Parts API
+            <span
+              className={`text-xs px-2 py-1 rounded-full font-medium ${
+                mode === "search" ? "bg-blue-50 text-blue-600" : "bg-neutral-900 text-white"
+              }`}
+            >
+              {mode === "search" ? "Search API" : "Commerce API"}
             </span>
           </div>
           <h1 className="text-4xl font-extralight text-neutral-900 mb-3">API Explorer</h1>
