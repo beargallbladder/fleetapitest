@@ -51,6 +51,11 @@ function PartDetailContent() {
       // Helper to create part from local inventory
       const createLocalPart = (inv: typeof local) => {
         if (!inv) return null;
+        const hash = (s: string) => {
+          let h = 0;
+          for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+          return h;
+        };
         return {
           partNumber: inv.sku,
           name: inv.name,
@@ -64,35 +69,35 @@ function PartDetailContent() {
             dealerId: d.dealerId,
             name: d.name,
             distance: d.distance,
-            webPrice: inv.price * (0.98 + Math.random() * 0.04),
-            stock: Math.floor(Math.random() * 20) + 1,
+            webPrice: Math.round((inv.price * (0.97 + (hash(`${inv.sku}-${d.dealerId}`) % 7) / 100)) * 100) / 100,
+            stock: 1 + (hash(`${d.dealerId}-${inv.sku}`) % 20),
           })),
         };
       };
 
-      // If we have local inventory, use it directly (faster, no API needed)
-      if (local) {
-        const localPartData = createLocalPart(local);
-        setPart(localPartData);
-        if (localPartData?.dealers.length) {
-          setSelectedDealer(localPartData.dealers.sort((a, b) => a.webPrice - b.webPrice)[0]);
-        }
-        setLoading(false);
-        return;
-      }
+      const normalizePn = (s: string) => s.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
 
-      // Otherwise try API
+      // Try API first (real dealers/pricing). Fall back to local only if needed.
       try {
         const response = await searchParts(partNumber, zipCode, 1, 20);
-        const found = response.parts.find((p) => p.partNumber === partNumber);
+        const target = normalizePn(partNumber);
+        const found = response.parts.find((p) => normalizePn(p.partNumber) === target);
         
         setPart(found || null);
         if (found?.dealers.length) {
           setSelectedDealer(found.dealers.sort((a, b) => a.webPrice - b.webPrice)[0]);
         }
       } catch {
-        // API failed and no local - part not found
-        setPart(null);
+        // API failed - fall back if we have local inventory
+        if (local) {
+          const localPartData = createLocalPart(local);
+          setPart(localPartData);
+          if (localPartData?.dealers.length) {
+            setSelectedDealer(localPartData.dealers.sort((a, b) => a.webPrice - b.webPrice)[0]);
+          }
+        } else {
+          setPart(null);
+        }
       } finally {
         setLoading(false);
       }
