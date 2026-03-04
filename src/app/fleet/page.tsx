@@ -15,6 +15,12 @@ import {
   setWeatherConditions,
   initWASM,
 } from "@/lib/wasm/riskEngine";
+import {
+  getSortValue,
+  BEHAVIORAL_SORT_OPTIONS,
+  type BehavioralSortKey,
+  getBehavioralContext,
+} from "@/lib/vinBehavioralContext";
 import { WeatherCanvas, getWeatherType, WeatherType } from "@/components/fleet/WeatherCanvas";
 import { RiskVisualization, RiskMeter } from "@/components/fleet/RiskVisualization";
 import { Sparkline } from "@/components/Sparkline";
@@ -29,6 +35,7 @@ export default function FleetIntelligencePage() {
   const [vehicleRisks, setVehicleRisks] = useState<Map<string, VehicleRiskResult>>(new Map());
   const [dtcSparklines, setDtcSparklines] = useState<SparklineData[]>([]);
   const [isCalculating, setIsCalculating] = useState(true);
+  const [behavioralSort, setBehavioralSort] = useState<BehavioralSortKey>("priority_index");
 
   // Initialize Risk Engine on mount
   useEffect(() => {
@@ -178,14 +185,20 @@ export default function FleetIntelligencePage() {
   const selectedRecalls = selectedVIN ? (vehicleRecalls.get(selectedVIN) || []) : [];
   const cohortComparison = selectedRisk ? compareToFleetCohort(selectedRisk, 2500) : null;
 
-  // Sort vehicles by priority
+  // Sort vehicles by behavioral context (VIN Behavioral Context Layer)
   const sortedVehicles = useMemo(() => {
     return [...fleetVehicles].sort((a, b) => {
-      const riskA = vehicleRisks.get(a.vin)?.priorityScore || 0;
-      const riskB = vehicleRisks.get(b.vin)?.priorityScore || 0;
-      return riskB - riskA;
+      const valA = getSortValue(a.vin, behavioralSort, {
+        fleetId: a.fleetId,
+        tripVolume: a.tripVolume,
+      });
+      const valB = getSortValue(b.vin, behavioralSort, {
+        fleetId: b.fleetId,
+        tripVolume: b.tripVolume,
+      });
+      return valB - valA; // higher = engage first
     });
-  }, [vehicleRisks]);
+  }, [behavioralSort]);
 
   return (
     <div className="min-h-screen bg-white relative">
@@ -262,9 +275,21 @@ export default function FleetIntelligencePage() {
               <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-neutral-100 p-6">
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-sm font-medium text-neutral-900">Fleet Vehicles</h2>
-                  <span className="text-xs text-neutral-400">
-                    {fleetVehicles.length} total
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-neutral-400 whitespace-nowrap">Sort by</label>
+                    <select
+                      value={behavioralSort}
+                      onChange={(e) => setBehavioralSort(e.target.value as BehavioralSortKey)}
+                      className="text-xs px-2 py-1.5 bg-white border border-neutral-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-neutral-300"
+                    >
+                      {BEHAVIORAL_SORT_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="text-xs text-neutral-400">{fleetVehicles.length} total</span>
+                  </div>
                 </div>
 
                 {isCalculating ? (
@@ -278,6 +303,10 @@ export default function FleetIntelligencePage() {
                       const risk = vehicleRisks.get(vehicle.vin);
                       const recalls = vehicleRecalls.get(vehicle.vin) || [];
                       const isSelected = selectedVIN === vehicle.vin;
+                      const behavioral = getBehavioralContext(vehicle.vin, {
+                        fleetId: vehicle.fleetId,
+                        tripVolume: vehicle.tripVolume,
+                      });
 
                       return (
                         <button
@@ -297,6 +326,18 @@ export default function FleetIntelligencePage() {
                               </div>
                               <div className={`text-xs ${isSelected ? "text-neutral-400" : "text-neutral-500"}`}>
                                 {vehicle.vin.slice(-6)} · {vehicle.odometer.toLocaleString()} mi
+                              </div>
+                              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                  isSelected ? "bg-neutral-700 text-neutral-200" : "bg-neutral-200 text-neutral-600"
+                                }`}>
+                                  {behavioral.vas.activity_state}
+                                </span>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                  isSelected ? "bg-neutral-700 text-neutral-200" : "bg-neutral-200 text-neutral-600"
+                                }`}>
+                                  TSI {behavioral.tsi.stress_band}
+                                </span>
                               </div>
                             </div>
                           </div>

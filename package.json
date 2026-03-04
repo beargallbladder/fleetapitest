@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3002",
     "build": "npm run build:wasm && next build",
     "build:wasm": "asc wasm/assembly/index.ts -o public/risk-engine.wasm --optimize && asc wasm/assembly/wear.ts -o public/wear-engine.wasm --optimize",
-    "start": "next start",
+    "start": "next start -p 3002",
     "lint": "next lint"
   },
   "dependencies": {

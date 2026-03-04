@@ -16,8 +16,12 @@ export function middleware(req: NextRequest) {
   const expectedUser = process.env.BASIC_AUTH_USERNAME;
   const expectedPass = process.env.BASIC_AUTH_PASSWORD;
 
-  // If env vars aren't set, fail closed (do not accidentally expose).
-  if (!expectedUser || !expectedPass) return unauthorized();
+  // In production, fail closed if env vars aren't set (do not accidentally expose).
+  // In development, allow running the demo locally without credentials.
+  const isProd = process.env.NODE_ENV === "production";
+  if (!expectedUser || !expectedPass) {
+    return isProd ? unauthorized() : NextResponse.next();
+  }
 
   const authHeader = req.headers.get("authorization");
   if (!authHeader || !authHeader.startsWith("Basic ")) return unauthorized();

@@ -136,6 +136,8 @@ npm run dev
 # Open http://localhost:3002
 ```
 
+Note: In production this app is protected by Basic Auth (set `BASIC_AUTH_USERNAME` and `BASIC_AUTH_PASSWORD`). In local development, missing credentials will **not** block access.
+
 ## 🔌 API Integration
 
 Connected to Jericho Ford Parts API:

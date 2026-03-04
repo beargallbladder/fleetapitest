@@ -9,6 +9,12 @@ import { fetchWeatherWithNormals, WeatherData } from "@/lib/weather";
 import { calculateFleetPriorities, getPrioritySummary, ServicePriority, filterByTripVolume } from "@/lib/servicePriority";
 import { regionalProfiles, calculateEnvironmentalStress } from "@/lib/environmentalFactors";
 import { getCohortDTCProfile, CohortDTCProfile, DTC_CATEGORIES } from "@/lib/dtc";
+import {
+  getSortValue,
+  BEHAVIORAL_SORT_OPTIONS,
+  type BehavioralSortKey,
+  getBehavioralContext,
+} from "@/lib/vinBehavioralContext";
 import { 
   fetchFleetRecalls, 
   fetchInvestigations, 
@@ -91,6 +97,7 @@ function DashboardContent() {
   const [vehicleNHTSA, setVehicleNHTSA] = useState<VehicleNHTSAData | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingVehicle, setLoadingVehicle] = useState(false);
+  const [behavioralSort, setBehavioralSort] = useState<BehavioralSortKey>("priority_index");
   
   // Map VINs to their recall counts
   const [vehicleRecallMap, setVehicleRecallMap] = useState<Map<string, number>>(new Map());
@@ -182,10 +189,22 @@ function DashboardContent() {
   const summary = getPrioritySummary(filteredPriorities);
   const fleetStats = getFleetStats();
 
-  // Get vehicles for selected model
-  const modelVehicles = selectedModel 
-    ? filteredVehicles.filter(v => v.model === selectedModel)
-    : [];
+  // Get vehicles for selected model, sorted by behavioral context
+  const modelVehicles = useMemo(() => {
+    if (!selectedModel) return [];
+    const list = filteredVehicles.filter(v => v.model === selectedModel);
+    return [...list].sort((a, b) => {
+      const valA = getSortValue(a.vin, behavioralSort, {
+        fleetId: a.fleetId,
+        tripVolume: a.tripVolume,
+      });
+      const valB = getSortValue(b.vin, behavioralSort, {
+        fleetId: b.fleetId,
+        tripVolume: b.tripVolume,
+      });
+      return valB - valA; // higher = engage first
+    });
+  }, [selectedModel, filteredVehicles, behavioralSort]);
 
   // Get part with price
   const getPartInfo = (sku: string) => realInventory.find(p => p.sku === sku);
@@ -404,20 +423,31 @@ function DashboardContent() {
           <div className="col-span-4">
             {selectedModel ? (
               <>
-                <div className="text-xs text-neutral-400 uppercase tracking-wide mb-3">
-                  {modelVehicles.length} {selectedModel}s
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-xs text-neutral-400 uppercase tracking-wide">
+                    {modelVehicles.length} {selectedModel}s
+                  </div>
+                  <select
+                    value={behavioralSort}
+                    onChange={(e) => setBehavioralSort(e.target.value as BehavioralSortKey)}
+                    className="text-xs px-2 py-1 border border-neutral-200 rounded bg-white focus:outline-none focus:ring-1 focus:ring-neutral-300"
+                  >
+                    {BEHAVIORAL_SORT_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div className="space-y-1 max-h-[600px] overflow-y-auto">
-                  {modelVehicles
-                    .sort((a, b) => {
-                      const pa = priorities.find(p => p.vin === a.vin);
-                      const pb = priorities.find(p => p.vin === b.vin);
-                      return (pb?.priorityScore || 0) - (pa?.priorityScore || 0);
-                    })
-                    .map(v => {
+                  {modelVehicles.map(v => {
                       const priority = priorities.find(p => p.vin === v.vin);
                       const isSelected = selectedVehicle?.vin === v.vin;
                       const vehicleRecallCount = vehicleRecallMap.get(v.vin) || 0;
+                      const behavioral = getBehavioralContext(v.vin, {
+                        fleetId: v.fleetId,
+                        tripVolume: v.tripVolume,
+                      });
                       
                       return (
                         <button
@@ -450,6 +480,18 @@ function DashboardContent() {
                           </div>
                           <div className={`text-xs ${isSelected ? "text-neutral-400" : "text-neutral-400"}`}>
                             {v.odometer.toLocaleString()} mi · {v.year}
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                              isSelected ? "bg-neutral-700 text-neutral-200" : "bg-neutral-200 text-neutral-600"
+                            }`}>
+                              {behavioral.vas.activity_state}
+                            </span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                              isSelected ? "bg-neutral-700 text-neutral-200" : "bg-neutral-200 text-neutral-600"
+                            }`}>
+                              TSI {behavioral.tsi.stress_band}
+                            </span>
                           </div>
                         </button>
                       );
