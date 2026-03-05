@@ -15,6 +15,11 @@ import {
   type BehavioralSortKey,
   getBehavioralContext,
 } from "@/lib/vinBehavioralContext";
+import {
+  getGovernanceAction,
+  derivePosteriorFromVehicle,
+  GOVERNANCE_ACTION_LABELS,
+} from "@/lib/governanceMatrix";
 import { 
   fetchFleetRecalls, 
   fetchInvestigations, 
@@ -556,6 +561,38 @@ function DashboardContent() {
                           <div className="text-neutral-900">{new Date(selectedVehicle.nextServiceDue).toLocaleDateString()}</div>
                         </div>
                       </div>
+
+                      {/* Patent demo: [P, C, S] → governance action (§4.4.3) */}
+                      {(() => {
+                        const vehiclePriority = priorities.find(p => p.vin === selectedVehicle.vin);
+                        const score = vehiclePriority?.priorityScore ?? 0;
+                        const factorCount = vehiclePriority?.factors?.length ?? 4;
+                        const posterior = derivePosteriorFromVehicle(selectedVehicle, score, factorCount);
+                        const action = getGovernanceAction(posterior);
+                        return (
+                          <div className="mt-4 p-3 bg-neutral-50 rounded-lg border border-neutral-100">
+                            <div className="text-[10px] text-neutral-400 uppercase tracking-wide mb-2">
+                              Governance (patent demo)
+                            </div>
+                            <div className="flex items-center gap-3 text-xs">
+                              <span className="text-neutral-500">P={posterior.P.toFixed(2)}</span>
+                              <span className="text-neutral-500">C={posterior.C.toFixed(2)}</span>
+                              <span className="text-neutral-500">S={posterior.S}d</span>
+                              <span className={`ml-auto px-2 py-0.5 rounded font-medium ${
+                                action === "Suppress" ? "bg-green-100 text-green-700" :
+                                action === "Sustain" || action === "Sustain + escalate" ? "bg-red-100 text-red-700" :
+                                action === "Hold — request signal" || action === "Hold — stale" ? "bg-amber-100 text-amber-700" :
+                                "bg-neutral-200 text-neutral-700"
+                              }`}>
+                                {action}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-neutral-400 mt-1">
+                              {GOVERNANCE_ACTION_LABELS[action]}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   );
                 })()}
