@@ -26,6 +26,7 @@ import {
   derivePosteriorFromVehicle,
   BAND_ACTIONS,
   getBandReason,
+  GOVERNANCE_PARADIGM,
   GOVERNANCE_VALUE_PROP,
 } from "@/lib/governanceMatrix";
 import { WEAR_PARTS } from "@/lib/wearParts";
@@ -297,31 +298,22 @@ export default function FleetIntelligencePage() {
           )}
         </header>
 
-        {/* Governance value prop + band counts — why governance is effective */}
+        {/* Governance: paradigm + band counts */}
         {!isCalculating && (
           <div className="max-w-7xl mx-auto px-8 -mt-2 mb-6">
             <div className="bg-neutral-50 border border-neutral-100 rounded-xl px-6 py-4">
-              <p className="text-sm text-neutral-600 mb-3">{GOVERNANCE_VALUE_PROP}</p>
-              <div className="flex items-center gap-6 text-sm">
-                <span className="font-medium text-neutral-900">Band summary:</span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-red-500" />
-                  <span className="text-red-700 font-medium">{governanceCounts.escalated} ESCALATED</span>
-                  <span className="text-neutral-400">(order parts)</span>
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-amber-500" />
-                  <span className="text-amber-700 font-medium">{governanceCounts.monitor} MONITOR</span>
-                  <span className="text-neutral-400">(track)</span>
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-green-500" />
-                  <span className="text-green-700 font-medium">{governanceCounts.suppressed} SUPPRESSED</span>
-                  <span className="text-neutral-400">(no action)</span>
-                </span>
+              <p className="text-sm font-medium text-neutral-800 mb-1">{GOVERNANCE_PARADIGM}</p>
+              <p className="text-xs text-neutral-500 mb-3">{GOVERNANCE_VALUE_PROP}</p>
+              <div className="flex items-center gap-6 text-sm flex-wrap">
+                <span className="w-2 h-2 rounded-full bg-red-500" aria-hidden />
+                <span className="text-red-700 font-medium">{governanceCounts.escalated} ESCALATED</span>
+                <span className="w-2 h-2 rounded-full bg-amber-500" aria-hidden />
+                <span className="text-amber-700 font-medium">{governanceCounts.monitor} MONITOR</span>
+                <span className="w-2 h-2 rounded-full bg-green-500" aria-hidden />
+                <span className="text-green-700 font-medium">{governanceCounts.suppressed} SUPPRESSED</span>
                 {wouldEscalateOnPAlone > governanceCounts.escalated && (
-                  <span className="ml-auto text-xs text-neutral-500 bg-white px-2 py-1 rounded border border-neutral-100">
-                    If we used P alone: {wouldEscalateOnPAlone} would escalate. With P+C+S: {governanceCounts.escalated} — {wouldEscalateOnPAlone - governanceCounts.escalated} false alarms avoided.
+                  <span className="ml-auto text-xs text-neutral-500">
+                    P-only would escalate {wouldEscalateOnPAlone}; P+C+S → {governanceCounts.escalated}. {wouldEscalateOnPAlone - governanceCounts.escalated} avoided.
                   </span>
                 )}
               </div>
@@ -404,12 +396,12 @@ export default function FleetIntelligencePage() {
                                     {band}
                                   </span>
                                 )}
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${
                                   isSelected ? "bg-neutral-700 text-neutral-200" : "bg-neutral-200 text-neutral-600"
                                 }`}>
                                   {behavioral.vas.activity_state}
                                 </span>
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${
                                   isSelected ? "bg-neutral-700 text-neutral-200" : "bg-neutral-200 text-neutral-600"
                                 }`}>
                                   TSI {behavioral.tsi.stress_band}
@@ -462,7 +454,7 @@ export default function FleetIntelligencePage() {
                           </div>
                         </div>
                       </div>
-                      {/* Governance (PRD): P from WASM risk → band → wear parts & order */}
+                      {/* State vector → Band (P from risk engine) */}
                       {(() => {
                         const posterior = derivePosteriorFromVehicle(
                           selectedVehicle,
@@ -476,12 +468,12 @@ export default function FleetIntelligencePage() {
                           <div className="mt-4 space-y-3">
                             <div className="p-3 bg-neutral-50 rounded-lg border border-neutral-100">
                               <div className="text-[10px] text-neutral-400 uppercase tracking-wide mb-2">
-                                Governance band · P from risk engine
+                                P, C, S → Band
                               </div>
                               <div className="flex items-center gap-3 text-xs flex-wrap">
-                                <span className="text-neutral-500">P={posterior.P.toFixed(2)}</span>
-                                <span className="text-neutral-500">C={posterior.C.toFixed(2)}</span>
-                                <span className="text-neutral-500">S={posterior.S}d</span>
+                                <span className="font-mono text-neutral-600">P={posterior.P.toFixed(2)}</span>
+                                <span className="font-mono text-neutral-600">C={posterior.C.toFixed(2)}</span>
+                                <span className="font-mono text-neutral-600">S={posterior.S}d</span>
                                 <span className={`ml-auto px-2 py-0.5 rounded font-medium ${
                                   band === "ESCALATED" ? "bg-red-100 text-red-700" :
                                   band === "MONITOR" ? "bg-amber-100 text-amber-700" :
@@ -491,14 +483,14 @@ export default function FleetIntelligencePage() {
                                 </span>
                               </div>
                               <div className="text-[10px] text-neutral-500 mt-1">{action}</div>
-                              <p className="text-[10px] text-neutral-400 mt-1.5 italic">
-                                Why this band: {getBandReason(band, posterior)}
+                              <p className="text-[10px] text-neutral-400 mt-1.5">
+                                {getBandReason(band, posterior)}
                               </p>
                             </div>
                             {band === "ESCALATED" && (
                               <div className="p-3 bg-red-50/80 border border-red-100 rounded-lg">
                                 <div className="text-[10px] text-red-700 uppercase tracking-wide mb-2">
-                                  Wear parts at risk
+                                  Action: wear parts
                                 </div>
                                 <div className="flex flex-wrap gap-2 mb-2">
                                   {WEAR_PARTS.slice(0, 5).map(wp => {
@@ -664,7 +656,7 @@ export default function FleetIntelligencePage() {
                             href={`/?mode=commerce&year=${selectedVehicle.year}&model=${selectedVehicle.model}`}
                             className="w-full py-3 bg-red-600 text-white rounded-xl text-center text-sm font-medium hover:bg-red-700 transition-colors"
                           >
-                            Order wear parts (ESCALATED)
+                            Order wear parts
                           </Link>
                         )}
                         <div className="flex items-center gap-4">

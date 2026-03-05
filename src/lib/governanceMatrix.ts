@@ -65,9 +65,12 @@ export function getBandReason(band: GovernanceBand, { P, C, S }: PosteriorState)
   return "Below escalation threshold";
 }
 
-/** Value prop for governance (header / summary). */
+/** Paradigm: one state vector, one band, one action. */
+export const GOVERNANCE_PARADIGM = "P, C, S → Band → Action. Evidence strength and freshness gate every escalation.";
+
+/** Value prop (outcome). */
 export const GOVERNANCE_VALUE_PROP =
-  "Governance uses P, C, and S so we only escalate when evidence is strong and fresh — fewer false alarms, parts orders focused on real risk.";
+  "One state vector (P, C, S). One band. One action. No single-score escalation — fewer false alarms, orders focused on real risk.";
 
 /**
  * Derive [P, C, S] for demo. On Fleet, pass WASM risk posterior so P comes from risk engine.

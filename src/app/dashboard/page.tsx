@@ -19,6 +19,7 @@ import {
   getGovernanceBand,
   derivePosteriorFromVehicle,
   BAND_ACTIONS,
+  GOVERNANCE_PARADIGM,
   GOVERNANCE_VALUE_PROP,
 } from "@/lib/governanceMatrix";
 import { WEAR_PARTS } from "@/lib/wearParts";
@@ -340,9 +341,10 @@ function DashboardContent() {
           </div>
           </div>
 
-          {/* Governance summary — why it's effective */}
+          {/* Governance: paradigm + bands */}
           <div className="mt-6 bg-neutral-50 border border-neutral-100 rounded-lg px-4 py-3">
-            <p className="text-xs text-neutral-500 mb-2">{GOVERNANCE_VALUE_PROP}</p>
+            <p className="text-xs font-medium text-neutral-700 mb-1">{GOVERNANCE_PARADIGM}</p>
+            <p className="text-[11px] text-neutral-500 mb-2">{GOVERNANCE_VALUE_PROP}</p>
             <div className="flex items-center gap-4 text-xs">
               <span className="text-red-600 font-medium">{governanceCounts.escalated} ESCALATED</span>
               <span className="text-amber-600 font-medium">{governanceCounts.monitor} MONITOR</span>
@@ -417,7 +419,7 @@ function DashboardContent() {
                   }).length;
                   return escalatedCount > 0 ? (
                     <p className="text-xs text-amber-700 mb-2">
-                      {escalatedCount} in ESCALATED — bulk order wear parts below
+                      {escalatedCount} ESCALATED → bulk order below
                     </p>
                   ) : null;
                 })()}
@@ -601,7 +603,7 @@ function DashboardContent() {
                         return (
                           <div className="mt-4 p-3 bg-neutral-50 rounded-lg border border-neutral-100">
                             <div className="text-[10px] text-neutral-400 uppercase tracking-wide mb-2">
-                              Governance band
+                              P, C, S → Band
                             </div>
                             <div className="flex items-center gap-3 text-xs flex-wrap">
                               <span className="text-neutral-500">P={posterior.P.toFixed(2)}</span>
