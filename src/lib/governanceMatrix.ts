@@ -50,6 +50,25 @@ export const BAND_ACTIONS: Record<GovernanceBand, { label: string; action: strin
   },
 };
 
+/** One-line reason for band (for "Why this band?" in UI). */
+export function getBandReason(band: GovernanceBand, { P, C, S }: PosteriorState): string {
+  if (band === "ESCALATED") return "P≥0.85, C≥0.70, S≤14 — evidence strong and fresh";
+  if (band === "MONITOR") {
+    if (P < 0.60) return "P below 0.60 — track until risk rises";
+    if (C < 0.70) return "C below 0.70 — need more pillars before escalating";
+    if (S > 14) return "S > 14 days — evidence stale, hold workflow";
+    return "In monitor band — continue tracking";
+  }
+  if (C < 0.50) return "C < 0.50 — insufficient evidence (no single-pillar escalation)";
+  if (S > 60) return "S > 60 days — evidence too old, suppress";
+  if (P < 0.45) return "P < 0.45 — risk below threshold";
+  return "Below escalation threshold";
+}
+
+/** Value prop for governance (header / summary). */
+export const GOVERNANCE_VALUE_PROP =
+  "Governance uses P, C, and S so we only escalate when evidence is strong and fresh — fewer false alarms, parts orders focused on real risk.";
+
 /**
  * Derive [P, C, S] for demo. On Fleet, pass WASM risk posterior so P comes from risk engine.
  */

@@ -19,6 +19,7 @@ import {
   getGovernanceBand,
   derivePosteriorFromVehicle,
   BAND_ACTIONS,
+  GOVERNANCE_VALUE_PROP,
 } from "@/lib/governanceMatrix";
 import { WEAR_PARTS } from "@/lib/wearParts";
 import { 
@@ -201,6 +202,20 @@ function DashboardContent() {
     });
   }, [selectedModel, filteredVehicles, behavioralSort]);
 
+  // Governance band counts (why governance is effective)
+  const governanceCounts = useMemo(() => {
+    let escalated = 0, monitor = 0, suppressed = 0;
+    filteredVehicles.forEach(v => {
+      const pr = priorities.find(p => p.vin === v.vin);
+      const post = derivePosteriorFromVehicle(v, pr?.priorityScore ?? 0, pr?.factors?.length ?? 4, false);
+      const band = getGovernanceBand(post);
+      if (band === "ESCALATED") escalated++;
+      else if (band === "MONITOR") monitor++;
+      else suppressed++;
+    });
+    return { escalated, monitor, suppressed };
+  }, [filteredVehicles, priorities]);
+
   // Get part with price
   const getPartInfo = (sku: string) => realInventory.find(p => p.sku === sku);
 
@@ -246,27 +261,27 @@ function DashboardContent() {
       <div className="max-w-6xl mx-auto px-8 py-8">
         
         {/* Priority Summary + Environmental Factors */}
-        <div className="flex items-start justify-between mb-8 pb-8 border-b border-neutral-100">
-          <div className="flex items-center gap-8">
-            <div className="flex items-center gap-2">
-              <span className="text-3xl font-light text-red-500">{summary.critical}</span>
-              <span className="text-xs text-neutral-400 uppercase tracking-wide">Critical</span>
+        <div className="mb-8 pb-8 border-b border-neutral-100">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-8">
+              <div className="flex items-center gap-2">
+                <span className="text-3xl font-light text-red-500">{summary.critical}</span>
+                <span className="text-xs text-neutral-400 uppercase tracking-wide">Critical</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-3xl font-light text-orange-500">{summary.high}</span>
+                <span className="text-xs text-neutral-400 uppercase tracking-wide">High</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-3xl font-light text-neutral-400">{summary.medium}</span>
+                <span className="text-xs text-neutral-400 uppercase tracking-wide">Medium</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-3xl font-light text-neutral-300">{summary.low}</span>
+                <span className="text-xs text-neutral-400 uppercase tracking-wide">Low</span>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-3xl font-light text-orange-500">{summary.high}</span>
-              <span className="text-xs text-neutral-400 uppercase tracking-wide">High</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-3xl font-light text-neutral-400">{summary.medium}</span>
-              <span className="text-xs text-neutral-400 uppercase tracking-wide">Medium</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-3xl font-light text-neutral-300">{summary.low}</span>
-              <span className="text-xs text-neutral-400 uppercase tracking-wide">Low</span>
-            </div>
-          </div>
-          
-          {/* Environment & Filters */}
+            {/* Environment & Filters */}
           <div className="flex flex-col gap-3 items-end">
             {/* Region selector */}
             <div className="flex items-center gap-2 text-xs">
@@ -321,6 +336,17 @@ function DashboardContent() {
                   {v === "all" ? "All Trips" : v.charAt(0).toUpperCase() + v.slice(1)}
                 </button>
               ))}
+            </div>
+          </div>
+          </div>
+
+          {/* Governance summary — why it's effective */}
+          <div className="mt-6 bg-neutral-50 border border-neutral-100 rounded-lg px-4 py-3">
+            <p className="text-xs text-neutral-500 mb-2">{GOVERNANCE_VALUE_PROP}</p>
+            <div className="flex items-center gap-4 text-xs">
+              <span className="text-red-600 font-medium">{governanceCounts.escalated} ESCALATED</span>
+              <span className="text-amber-600 font-medium">{governanceCounts.monitor} MONITOR</span>
+              <span className="text-green-600 font-medium">{governanceCounts.suppressed} SUPPRESSED</span>
             </div>
           </div>
         </div>

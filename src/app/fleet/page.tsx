@@ -25,6 +25,8 @@ import {
   getGovernanceBand,
   derivePosteriorFromVehicle,
   BAND_ACTIONS,
+  getBandReason,
+  GOVERNANCE_VALUE_PROP,
 } from "@/lib/governanceMatrix";
 import { WEAR_PARTS } from "@/lib/wearParts";
 import { realInventory } from "@/lib/inventory";
@@ -207,6 +209,28 @@ export default function FleetIntelligencePage() {
     });
   }, [behavioralSort]);
 
+  // Governance band counts (for "why governance is effective" summary)
+  const governanceCounts = useMemo(() => {
+    let escalated = 0, monitor = 0, suppressed = 0;
+    fleetVehicles.forEach(v => {
+      const risk = vehicleRisks.get(v.vin);
+      if (!risk) return;
+      const post = derivePosteriorFromVehicle(v, risk.posterior, 5, true);
+      const band = getGovernanceBand(post);
+      if (band === "ESCALATED") escalated++;
+      else if (band === "MONITOR") monitor++;
+      else suppressed++;
+    });
+    return { escalated, monitor, suppressed };
+  }, [vehicleRisks]);
+
+  const wouldEscalateOnPAlone = useMemo(() => {
+    return fleetVehicles.filter(v => {
+      const risk = vehicleRisks.get(v.vin);
+      return risk && risk.posterior >= 0.85;
+    }).length;
+  }, [vehicleRisks]);
+
   return (
     <div className="min-h-screen bg-white relative">
       {/* Weather-responsive background */}
@@ -272,6 +296,38 @@ export default function FleetIntelligencePage() {
             </div>
           )}
         </header>
+
+        {/* Governance value prop + band counts — why governance is effective */}
+        {!isCalculating && (
+          <div className="max-w-7xl mx-auto px-8 -mt-2 mb-6">
+            <div className="bg-neutral-50 border border-neutral-100 rounded-xl px-6 py-4">
+              <p className="text-sm text-neutral-600 mb-3">{GOVERNANCE_VALUE_PROP}</p>
+              <div className="flex items-center gap-6 text-sm">
+                <span className="font-medium text-neutral-900">Band summary:</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-red-500" />
+                  <span className="text-red-700 font-medium">{governanceCounts.escalated} ESCALATED</span>
+                  <span className="text-neutral-400">(order parts)</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-500" />
+                  <span className="text-amber-700 font-medium">{governanceCounts.monitor} MONITOR</span>
+                  <span className="text-neutral-400">(track)</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-green-500" />
+                  <span className="text-green-700 font-medium">{governanceCounts.suppressed} SUPPRESSED</span>
+                  <span className="text-neutral-400">(no action)</span>
+                </span>
+                {wouldEscalateOnPAlone > governanceCounts.escalated && (
+                  <span className="ml-auto text-xs text-neutral-500 bg-white px-2 py-1 rounded border border-neutral-100">
+                    If we used P alone: {wouldEscalateOnPAlone} would escalate. With P+C+S: {governanceCounts.escalated} — {wouldEscalateOnPAlone - governanceCounts.escalated} false alarms avoided.
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Main Grid */}
         <div className="max-w-7xl mx-auto px-8">
@@ -435,6 +491,9 @@ export default function FleetIntelligencePage() {
                                 </span>
                               </div>
                               <div className="text-[10px] text-neutral-500 mt-1">{action}</div>
+                              <p className="text-[10px] text-neutral-400 mt-1.5 italic">
+                                Why this band: {getBandReason(band, posterior)}
+                              </p>
                             </div>
                             {band === "ESCALATED" && (
                               <div className="p-3 bg-red-50/80 border border-red-100 rounded-lg">
