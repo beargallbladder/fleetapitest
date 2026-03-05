@@ -1,72 +1,86 @@
 /**
- * Patent-aligned governance demo: [P, C, S] → governance action.
- * From "Probabilistic Vehicle Health Governance Architecture" §4.4.3:
- * identical P can produce different actions based on confidence (C) and staleness (S).
- * This is a minimal in-app example of the threshold matrix concept.
+ * VIN Governance — PRD-aligned state machine (VIN_Governance_PRD v1.2).
+ * P, C, S → Band (ESCALATED | MONITOR | SUPPRESSED). Bands drive workflow and parts ordering.
+ * Works with WASM risk engine: P from posterior, C from pillar coverage, S from evidence age.
  */
 
-export type GovernanceAction =
-  | "Suppress"
-  | "Hold — request signal"
-  | "Hold — stale"
-  | "Sustain"
-  | "Sustain + escalate"
-  | "Monitor";
+export type GovernanceBand = "ESCALATED" | "MONITOR" | "SUPPRESSED";
 
 export interface PosteriorState {
-  P: number; // posterior probability 0–1
-  C: number; // confidence 0–1 (pillar coverage / corroboration)
+  P: number; // posterior probability [0, 1] — from risk engine when available
+  C: number; // confidence [0, 1] — pillar coverage × corroboration
   S: number; // staleness (days since most recent evidence)
 }
 
-/** Simplified threshold matrix (patent §4.4.3). Returns governance action from [P, C, S]. */
-export function getGovernanceAction({ P, C, S }: PosteriorState): GovernanceAction {
-  // Stale: evidence too old regardless of P/C
-  if (S >= 30) return "Hold — stale";
+/** PRD §5: Decision bands. ESCALATED = workflow trigger; MONITOR = track; SUPPRESSED = no action. */
+export function getGovernanceBand({ P, C, S }: PosteriorState): GovernanceBand {
+  // PRD §5 SUPPRESSED: C < 0.50 forces SUPPRESSED regardless of P
+  if (C < 0.50) return "SUPPRESSED";
+  // PRD §4.3 / §9.4: S > 60 forces SUPPRESSED unconditionally
+  if (S > 60) return "SUPPRESSED";
+  // P < 0.45 → SUPPRESSED
+  if (P < 0.45) return "SUPPRESSED";
 
-  // High P, high C, fresh → Suppress
-  if (P >= 0.85 && C >= 0.7 && S < 14) return "Suppress";
+  // PRD §5 ESCALATED: P ≥ 0.85 AND C ≥ 0.70 AND S ≤ 14
+  if (P >= 0.85 && C >= 0.70 && S <= 14) return "ESCALATED";
 
-  // High P but low C → Hold (need more pillars)
-  if (P >= 0.85 && C < 0.7) return "Hold — request signal";
+  // PRD §5 MONITOR: 0.60 ≤ P < 0.85 AND C ≥ 0.60
+  if (P >= 0.60 && P < 0.85 && C >= 0.60) return "MONITOR";
 
-  // Low P, low C → Escalate
-  if (P < 0.4 && C < 0.5) return "Sustain + escalate";
-
-  // Low P with decent C → Sustain
-  if (P < 0.4) return "Sustain";
-
-  // Mid-band → Monitor
-  if (P >= 0.4 && P < 0.85) return "Monitor";
-
-  return "Monitor";
+  // Gap zone PRD §5 / §9.7: P ∈ [0.45, 0.60), C ∈ [0.50, 0.60) → SUPPRESSED by exhaustion
+  return "SUPPRESSED";
 }
 
-/** Derive a toy [P, C, S] from existing fleet/priority data for demo. */
-export function derivePosteriorFromVehicle(vehicle: {
-  vin: string;
-  lastServiceDate: string;
-  nextServiceDue: string;
-  fordHealthScore: number;
-  tripVolume: string;
-  odometer: number;
-  fordAlerts: string[];
-}, priorityScore: number, factorCount: number): PosteriorState {
-  const P = Math.min(1, Math.max(0, priorityScore / 100));
-  const nExpected = 6;
+/** Copy for UI: what this band means for risk → wear parts → order. */
+export const BAND_ACTIONS: Record<GovernanceBand, { label: string; action: string; cta: string }> = {
+  ESCALATED: {
+    label: "Escalated",
+    action: "Trigger workflow · Order wear parts",
+    cta: "Order wear parts",
+  },
+  MONITOR: {
+    label: "Monitor",
+    action: "Track · Order parts when due",
+    cta: "View parts",
+  },
+  SUPPRESSED: {
+    label: "Suppressed",
+    action: "No action",
+    cta: "View parts",
+  },
+};
+
+/**
+ * Derive [P, C, S] for demo. On Fleet, pass WASM risk posterior so P comes from risk engine.
+ */
+export function derivePosteriorFromVehicle(
+  vehicle: {
+    vin: string;
+    lastServiceDate: string;
+    nextServiceDue: string;
+    fordHealthScore: number;
+    tripVolume: string;
+    odometer: number;
+    fordAlerts: string[];
+  },
+  /** When from WASM risk engine, pass posterior (0–1). Otherwise priorityScore 0–100. */
+  priorityOrPosterior: number,
+  /** Number of pillars that contributed (n_present). 12V n_expected = 5. */
+  factorCount: number,
+  /** If true, priorityOrPosterior is already posterior [0,1]; else 0–100 score */
+  isPosterior = false
+): PosteriorState {
+  const P = isPosterior
+    ? Math.min(1, Math.max(0, priorityOrPosterior))
+    : Math.min(1, Math.max(0, priorityOrPosterior / 100));
+  const nExpected = 5; // 12V canonical
   const C = Math.min(1, (factorCount / nExpected) * 1.2);
   const lastService = new Date(vehicle.lastServiceDate);
   const now = new Date();
-  const daysSinceService = Math.max(0, Math.ceil((now.getTime() - lastService.getTime()) / (1000 * 60 * 60 * 24)));
-  const S = Math.min(60, daysSinceService);
+  const daysSinceService = Math.max(
+    0,
+    Math.ceil((now.getTime() - lastService.getTime()) / (1000 * 60 * 60 * 24))
+  );
+  const S = Math.min(61, daysSinceService);
   return { P, C, S };
 }
-
-export const GOVERNANCE_ACTION_LABELS: Record<GovernanceAction, string> = {
-  "Suppress": "Suppress alert",
-  "Hold — request signal": "Hold — request additional signal",
-  "Hold — stale": "Hold — flag as stale",
-  "Sustain": "Sustain alert",
-  "Sustain + escalate": "Sustain + escalate to dealer",
-  "Monitor": "Monitor — no action",
-};

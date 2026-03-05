@@ -22,10 +22,12 @@ import {
   getBehavioralContext,
 } from "@/lib/vinBehavioralContext";
 import {
-  getGovernanceAction,
+  getGovernanceBand,
   derivePosteriorFromVehicle,
-  GOVERNANCE_ACTION_LABELS,
+  BAND_ACTIONS,
 } from "@/lib/governanceMatrix";
+import { WEAR_PARTS } from "@/lib/wearParts";
+import { realInventory } from "@/lib/inventory";
 import { WeatherCanvas, getWeatherType, WeatherType } from "@/components/fleet/WeatherCanvas";
 import { RiskVisualization, RiskMeter } from "@/components/fleet/RiskVisualization";
 import { Sparkline } from "@/components/Sparkline";
@@ -312,6 +314,10 @@ export default function FleetIntelligencePage() {
                         fleetId: vehicle.fleetId,
                         tripVolume: vehicle.tripVolume,
                       });
+                      const post = risk
+                        ? derivePosteriorFromVehicle(vehicle, risk.posterior, 5, true)
+                        : null;
+                      const band = post ? getGovernanceBand(post) : null;
 
                       return (
                         <button
@@ -333,6 +339,15 @@ export default function FleetIntelligencePage() {
                                 {vehicle.vin.slice(-6)} · {vehicle.odometer.toLocaleString()} mi
                               </div>
                               <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                {band && (
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                    band === "ESCALATED" ? (isSelected ? "bg-red-500/80 text-white" : "bg-red-100 text-red-700") :
+                                    band === "MONITOR" ? (isSelected ? "bg-amber-500/80 text-white" : "bg-amber-100 text-amber-700") :
+                                    isSelected ? "bg-neutral-700 text-neutral-200" : "bg-neutral-200 text-neutral-600"
+                                  }`}>
+                                    {band}
+                                  </span>
+                                )}
                                 <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                                   isSelected ? "bg-neutral-700 text-neutral-200" : "bg-neutral-200 text-neutral-600"
                                 }`}>
@@ -391,35 +406,63 @@ export default function FleetIntelligencePage() {
                           </div>
                         </div>
                       </div>
-                      {/* Patent demo: [P, C, S] → governance action (§4.4.3) */}
+                      {/* Governance (PRD): P from WASM risk → band → wear parts & order */}
                       {(() => {
                         const posterior = derivePosteriorFromVehicle(
                           selectedVehicle,
-                          selectedRisk.priorityScore,
-                          5
+                          selectedRisk.posterior,
+                          5,
+                          true
                         );
-                        const action = getGovernanceAction(posterior);
+                        const band = getGovernanceBand(posterior);
+                        const { label, action, cta } = BAND_ACTIONS[band];
                         return (
-                          <div className="mt-4 p-3 bg-neutral-50 rounded-lg border border-neutral-100">
-                            <div className="text-[10px] text-neutral-400 uppercase tracking-wide mb-2">
-                              Governance (patent demo)
+                          <div className="mt-4 space-y-3">
+                            <div className="p-3 bg-neutral-50 rounded-lg border border-neutral-100">
+                              <div className="text-[10px] text-neutral-400 uppercase tracking-wide mb-2">
+                                Governance band · P from risk engine
+                              </div>
+                              <div className="flex items-center gap-3 text-xs flex-wrap">
+                                <span className="text-neutral-500">P={posterior.P.toFixed(2)}</span>
+                                <span className="text-neutral-500">C={posterior.C.toFixed(2)}</span>
+                                <span className="text-neutral-500">S={posterior.S}d</span>
+                                <span className={`ml-auto px-2 py-0.5 rounded font-medium ${
+                                  band === "ESCALATED" ? "bg-red-100 text-red-700" :
+                                  band === "MONITOR" ? "bg-amber-100 text-amber-700" :
+                                  "bg-green-100 text-green-700"
+                                }`}>
+                                  {label}
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-neutral-500 mt-1">{action}</div>
                             </div>
-                            <div className="flex items-center gap-3 text-xs">
-                              <span className="text-neutral-500">P={posterior.P.toFixed(2)}</span>
-                              <span className="text-neutral-500">C={posterior.C.toFixed(2)}</span>
-                              <span className="text-neutral-500">S={posterior.S}d</span>
-                              <span className={`ml-auto px-2 py-0.5 rounded font-medium ${
-                                action === "Suppress" ? "bg-green-100 text-green-700" :
-                                action === "Sustain" || action === "Sustain + escalate" ? "bg-red-100 text-red-700" :
-                                action === "Hold — request signal" || action === "Hold — stale" ? "bg-amber-100 text-amber-700" :
-                                "bg-neutral-200 text-neutral-700"
-                              }`}>
-                                {action}
-                              </span>
-                            </div>
-                            <div className="text-[10px] text-neutral-400 mt-1">
-                              {GOVERNANCE_ACTION_LABELS[action]}
-                            </div>
+                            {band === "ESCALATED" && (
+                              <div className="p-3 bg-red-50/80 border border-red-100 rounded-lg">
+                                <div className="text-[10px] text-red-700 uppercase tracking-wide mb-2">
+                                  Wear parts at risk
+                                </div>
+                                <div className="flex flex-wrap gap-2 mb-2">
+                                  {WEAR_PARTS.slice(0, 5).map(wp => {
+                                    const part = realInventory.find(p => p.sku === wp.sku);
+                                    return (
+                                      <Link
+                                        key={wp.sku}
+                                        href={`/parts/${wp.sku}`}
+                                        className="text-xs px-2 py-1 bg-white border border-red-100 rounded hover:border-red-300"
+                                      >
+                                        {wp.name} {part && `$${part.price.toFixed(0)}`}
+                                      </Link>
+                                    );
+                                  })}
+                                </div>
+                                <Link
+                                  href={`/?mode=commerce&year=${selectedVehicle.year}&model=${selectedVehicle.model}`}
+                                  className="text-xs font-medium text-red-700 hover:text-red-900"
+                                >
+                                  {cta} →
+                                </Link>
+                              </div>
+                            )}
                           </div>
                         );
                       })()}
@@ -545,21 +588,43 @@ export default function FleetIntelligencePage() {
                     </div>
                   </div>
 
-                  {/* Actions */}
-                  <div className="flex items-center gap-4">
-                    <Link
-                      href={`/dashboard?mode=commerce&vin=${selectedVehicle.vin}`}
-                      className="flex-1 py-3 bg-neutral-900 text-white rounded-xl text-center text-sm font-medium hover:bg-neutral-800 transition-colors"
-                    >
-                      View in Dashboard
-                    </Link>
-                    <Link
-                      href={`/?mode=commerce&year=${selectedVehicle.year}&model=${selectedVehicle.model}`}
-                      className="flex-1 py-3 bg-neutral-100 text-neutral-900 rounded-xl text-center text-sm font-medium hover:bg-neutral-200 transition-colors"
-                    >
-                      Order Parts
-                    </Link>
-                  </div>
+                  {/* Actions — risk → governance → wear parts → order */}
+                  {(() => {
+                    const posterior = derivePosteriorFromVehicle(
+                      selectedVehicle,
+                      selectedRisk.posterior,
+                      5,
+                      true
+                    );
+                    const band = getGovernanceBand(posterior);
+                    const isEscalated = band === "ESCALATED";
+                    return (
+                      <div className="flex flex-col gap-3">
+                        {isEscalated && (
+                          <Link
+                            href={`/?mode=commerce&year=${selectedVehicle.year}&model=${selectedVehicle.model}`}
+                            className="w-full py-3 bg-red-600 text-white rounded-xl text-center text-sm font-medium hover:bg-red-700 transition-colors"
+                          >
+                            Order wear parts (ESCALATED)
+                          </Link>
+                        )}
+                        <div className="flex items-center gap-4">
+                          <Link
+                            href={`/dashboard?mode=commerce&vin=${selectedVehicle.vin}`}
+                            className="flex-1 py-3 bg-neutral-900 text-white rounded-xl text-center text-sm font-medium hover:bg-neutral-800 transition-colors"
+                          >
+                            View in Dashboard
+                          </Link>
+                          <Link
+                            href={`/?mode=commerce&year=${selectedVehicle.year}&model=${selectedVehicle.model}`}
+                            className="flex-1 py-3 bg-neutral-100 text-neutral-900 rounded-xl text-center text-sm font-medium hover:bg-neutral-200 transition-colors"
+                          >
+                            {isEscalated ? "Browse parts" : "Order parts"}
+                          </Link>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               ) : (
                 <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-neutral-100 p-12 text-center">

@@ -16,10 +16,11 @@ import {
   getBehavioralContext,
 } from "@/lib/vinBehavioralContext";
 import {
-  getGovernanceAction,
+  getGovernanceBand,
   derivePosteriorFromVehicle,
-  GOVERNANCE_ACTION_LABELS,
+  BAND_ACTIONS,
 } from "@/lib/governanceMatrix";
+import { WEAR_PARTS } from "@/lib/wearParts";
 import { 
   fetchFleetRecalls, 
   fetchInvestigations, 
@@ -78,17 +79,6 @@ function aggregateByModel(
     .sort((a, b) => b.recallCount - a.recallCount || b.criticalCount - a.criticalCount || b.avgScore - a.avgScore);
 }
 
-// Common wear parts
-const WEAR_PARTS = [
-  { sku: "FL-500S", name: "Oil Filter", category: "filters" },
-  { sku: "FA-1900", name: "Air Filter", category: "filters" },
-  { sku: "FP-88", name: "Cabin Filter", category: "filters" },
-  { sku: "BRF-1478", name: "Brake Pads (F)", category: "brakes" },
-  { sku: "BRF-1934", name: "Brake Pads (R)", category: "brakes" },
-  { sku: "SP-589", name: "Spark Plugs", category: "electrical" },
-  { sku: "WW-2201-PF", name: "Wiper Blades", category: "wipers" },
-  { sku: "BAGM-48H6-800", name: "Battery", category: "electrical" },
-];
 
 function DashboardContent() {
   const [weather, setWeather] = useState<WeatherData | null>(null);
@@ -387,12 +377,24 @@ function DashboardContent() {
               </button>
             ))}
 
-            {/* Parts Needed */}
+            {/* Parts Needed — risk → wear parts → bulk order */}
             {selectedModel && (
               <div className="mt-6 pt-6 border-t border-neutral-100">
                 <div className="text-xs text-neutral-400 uppercase tracking-wide mb-3">
                   Parts for {selectedModel}s
                 </div>
+                {(() => {
+                  const escalatedCount = modelVehicles.filter(v => {
+                    const pr = priorities.find(p => p.vin === v.vin);
+                    const post = derivePosteriorFromVehicle(v, pr?.priorityScore ?? 0, pr?.factors?.length ?? 4, false);
+                    return getGovernanceBand(post) === "ESCALATED";
+                  }).length;
+                  return escalatedCount > 0 ? (
+                    <p className="text-xs text-amber-700 mb-2">
+                      {escalatedCount} in ESCALATED — bulk order wear parts below
+                    </p>
+                  ) : null;
+                })()}
                 <div className="space-y-1">
                   {WEAR_PARTS.map(wp => {
                     const part = getPartInfo(wp.sku);
@@ -562,34 +564,38 @@ function DashboardContent() {
                         </div>
                       </div>
 
-                      {/* Patent demo: [P, C, S] → governance action (§4.4.3) */}
+                      {/* Governance (PRD): [P, C, S] → band → wear parts & order */}
                       {(() => {
                         const vehiclePriority = priorities.find(p => p.vin === selectedVehicle.vin);
                         const score = vehiclePriority?.priorityScore ?? 0;
                         const factorCount = vehiclePriority?.factors?.length ?? 4;
-                        const posterior = derivePosteriorFromVehicle(selectedVehicle, score, factorCount);
-                        const action = getGovernanceAction(posterior);
+                        const posterior = derivePosteriorFromVehicle(selectedVehicle, score, factorCount, false);
+                        const band = getGovernanceBand(posterior);
+                        const { label, action, cta } = BAND_ACTIONS[band];
                         return (
                           <div className="mt-4 p-3 bg-neutral-50 rounded-lg border border-neutral-100">
                             <div className="text-[10px] text-neutral-400 uppercase tracking-wide mb-2">
-                              Governance (patent demo)
+                              Governance band
                             </div>
-                            <div className="flex items-center gap-3 text-xs">
+                            <div className="flex items-center gap-3 text-xs flex-wrap">
                               <span className="text-neutral-500">P={posterior.P.toFixed(2)}</span>
                               <span className="text-neutral-500">C={posterior.C.toFixed(2)}</span>
                               <span className="text-neutral-500">S={posterior.S}d</span>
                               <span className={`ml-auto px-2 py-0.5 rounded font-medium ${
-                                action === "Suppress" ? "bg-green-100 text-green-700" :
-                                action === "Sustain" || action === "Sustain + escalate" ? "bg-red-100 text-red-700" :
-                                action === "Hold — request signal" || action === "Hold — stale" ? "bg-amber-100 text-amber-700" :
-                                "bg-neutral-200 text-neutral-700"
+                                band === "ESCALATED" ? "bg-red-100 text-red-700" :
+                                band === "MONITOR" ? "bg-amber-100 text-amber-700" :
+                                "bg-green-100 text-green-700"
                               }`}>
-                                {action}
+                                {label}
                               </span>
                             </div>
-                            <div className="text-[10px] text-neutral-400 mt-1">
-                              {GOVERNANCE_ACTION_LABELS[action]}
-                            </div>
+                            <div className="text-[10px] text-neutral-500 mt-1">{action}</div>
+                            <Link
+                              href={`/?model=${encodeURIComponent(selectedVehicle.model.toLowerCase())}&year=${selectedVehicle.year}`}
+                              className="mt-2 inline-block text-xs font-medium text-neutral-700 hover:text-neutral-900"
+                            >
+                              {cta} →
+                            </Link>
                           </div>
                         );
                       })()}
